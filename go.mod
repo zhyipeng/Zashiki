@@ -1,4 +1,4 @@
-module changeme
+module zashiki
 
 go 1.25.0
 

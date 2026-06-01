@@ -4,6 +4,13 @@
 
 跨平台文件资源管理器，基于 Wails v3 构建桌面 GUI 应用。目前处于 Wails3 demo 阶段，目标是扩展为完整的文件管理工具。
 
+**重要：**
+- Wails 3 还处于 alpha 阶段，使用时应避免经验判断，而是根据文档和框架源码进行开发。
+- 开发时需优先考虑性能优化。
+- 尽可能覆盖测试用例。
+- 考虑代码质量和可维护性。
+- 支持跨平台。
+
 ## 技术栈
 
 | 层 | 技术 | 版本 |
@@ -13,19 +20,17 @@
 | 前端运行时 | bun.js | latest |
 | 前端语言 | TypeScript | `^4.9.3` |
 | 前端框架 | Vue 3 | `^3.2.45` |
-| UI 组件库 | Naive UI | (待加入依赖) |
+| UI 组件库 | Naive UI | `^2.44.1` |
 | 构建工具 | Vite | `^8.0.5` |
 | 类型检查 | vue-tsc | `^1.0.11` |
 | 任务编排 | Task (go-task) | `3.x` |
-
-**⚠ 注意：Wails 3 还处于 alpha 阶段，使用时应避免经验判断，而是根据文档和框架源码进行开发。**
 
 ## 项目结构
 
 ```
 file-explorer/
 ├── main.go                  # 应用入口，窗口创建，事件注册
-├── greetservice.go          # 示例 Service（待替换为实际业务）
+├── fileservice.go           # 文件系统 Service（ListDir / GetFileInfo / GetHomeDir / GetSeparator）
 ├── go.mod / go.sum          # Go 模块定义
 ├── Taskfile.yml             # 顶层 task 编排（dev/build/run 等）
 ├── build/                   # 平台构建配置（darwin/windows/linux/ios/android）
@@ -33,7 +38,7 @@ file-explorer/
 │   ├── src/
 │   │   ├── main.ts          # Vue 入口，createApp
 │   │   ├── App.vue          # 根组件
-│   │   └── components/      # Vue 组件
+│   │   └── components/      # Sidebar（目录树）、FileTable（文件列表）
 │   ├── bindings/            # Wails 自动生成的 TS 绑定（勿手动修改）
 │   ├── public/              # 静态资源
 │   ├── dist/                # 构建产物（embed 到 Go binary）
