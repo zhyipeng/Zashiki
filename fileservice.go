@@ -2,7 +2,9 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"time"
 )
@@ -46,6 +48,19 @@ func (f *FileService) ListDir(path string) ([]FileEntry, error) {
 	})
 
 	return result, nil
+}
+
+func (f *FileService) OpenFile(path string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", path).Start()
+	case "linux":
+		return exec.Command("xdg-open", path).Start()
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", path).Start()
+	default:
+		return exec.Command("open", path).Start()
+	}
 }
 
 func (f *FileService) GetHomeDir() string {

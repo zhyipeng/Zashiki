@@ -29,6 +29,10 @@ export function ListDir(path: string): $CancellablePromise<$models.FileEntry[]> 
     });
 }
 
+export function OpenFile(path: string): $CancellablePromise<void> {
+    return $Call.ByID(2444982985, path);
+}
+
 // Private type creation functions
 const $$createType0 = $models.FileEntry.createFrom;
 const $$createType1 = $Create.Array($$createType0);

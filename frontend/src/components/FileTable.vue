@@ -86,9 +86,16 @@ const columns: DataTableColumns<FileEntry> = [
   },
 ]
 
-function onRowClick(row: FileEntry) {
+async function onRowDblclick(row: FileEntry) {
   if (row.isDir) {
     emit('navigate', row.path)
+  } else {
+    try {
+      await FileService.OpenFile(row.path)
+    } catch (err) {
+      console.error('OpenFile failed:', row.path, err)
+      errorMsg.value = String(err)
+    }
   }
 }
 </script>
@@ -117,7 +124,7 @@ function onRowClick(row: FileEntry) {
         :row-key="(row: FileEntry) => row.path"
         :row-props="(row: FileEntry) => ({
           style: 'cursor: pointer',
-          onClick: () => onRowClick(row),
+          onDblclick: () => onRowDblclick(row),
         })"
         :bordered="false"
         :single-line="false"
