@@ -7,10 +7,14 @@ import type { FileEntry } from '../../bindings/zashiki'
 
 const props = defineProps<{
   path: string
+  closable?: boolean
 }>()
 
 const emit = defineEmits<{
   navigate: [path: string]
+  splitH: []
+  splitV: []
+  close: []
 }>()
 
 const entries = ref<FileEntry[]>([])
@@ -63,7 +67,6 @@ const columns: DataTableColumns<FileEntry> = [
   {
     title: 'Name',
     key: 'name',
-    width: '60%',
     render(row) {
       return [row.isDir ? '📁' : '📄', ' ', row.name].join('')
     },
@@ -71,7 +74,7 @@ const columns: DataTableColumns<FileEntry> = [
   {
     title: 'Size',
     key: 'size',
-    width: '15%',
+    width: '85px',
     render(row) {
       return row.isDir ? '-' : formatSize(row.size)
     },
@@ -79,7 +82,7 @@ const columns: DataTableColumns<FileEntry> = [
   {
     title: 'Modified',
     key: 'modTime',
-    width: '25%',
+    width: '165px',
     render(row) {
       return formatTime(row.modTime)
     },
@@ -103,7 +106,15 @@ async function onRowDblclick(row: FileEntry) {
 <template>
   <div class="file-table">
     <div class="toolbar">
-      <NSpace align="center">
+      <div class="toolbar-left">
+        <NButton
+          v-if="closable"
+          text
+          size="tiny"
+          @click="emit('close')"
+        >
+          &times;
+        </NButton>
         <NButton
           v-if="parentPath"
           text
@@ -112,7 +123,25 @@ async function onRowDblclick(row: FileEntry) {
           &larr;
         </NButton>
         <NText class="path-text">{{ path }}</NText>
-      </NSpace>
+      </div>
+      <div class="toolbar-right">
+        <NButton
+          text
+          size="tiny"
+          title="竖直分屏"
+          @click="emit('splitV')"
+        >
+          ⬌
+        </NButton>
+        <NButton
+          text
+          size="tiny"
+          title="水平分屏"
+          @click="emit('splitH')"
+        >
+          ⬍
+        </NButton>
+      </div>
     </div>
     <div class="table-area">
       <NAlert v-if="errorMsg" type="error" :title="errorMsg" class="error-alert" />
@@ -140,16 +169,35 @@ async function onRowDblclick(row: FileEntry) {
 
 <style scoped>
 .file-table {
-  width: 100%;
-  height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .toolbar {
-  padding: 50px 16px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--n-border-color);
   background: var(--n-color-embedded);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   flex-shrink: 0;
 }
 
