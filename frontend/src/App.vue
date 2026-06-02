@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { NLayout, NLayoutSider, NLayoutContent, NMessageProvider, NSpin } from 'naive-ui'
+import {ref, onMounted, watch} from 'vue'
+import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider} from 'naive-ui'
 import Sidebar from './components/Sidebar.vue'
 import SplitNode from './components/SplitNode.vue'
-import { createLeaf, splitLeaf, closeLeaf, navigateLeaf, getFirstLeafId, findLeafById } from './components/tree'
-import type { TreeNode } from './components/tree'
-import { FileService } from '../bindings/zashiki'
+import {createLeaf, splitLeaf, closeLeaf, navigateLeaf, getFirstLeafId, findLeafById} from './components/tree'
+import type {TreeNode} from './components/tree'
+import {FileService} from '../bindings/zashiki'
 
 const currentPath = ref('')
 const homeDir = ref('')
@@ -81,31 +81,47 @@ function handleFocus(leafId: number, path: string) {
 </script>
 
 <template>
-  <NMessageProvider>
-    <div v-if="loading" class="app-loading">
-      <NSpin />
-    </div>
-    <NLayout v-else has-sider class="app-layout">
-      <NLayoutSider width="260" bordered>
-        <Sidebar
-          :currentPath="currentPath"
-          :homeDir="homeDir"
-          @navigate="onNavigate"
-        />
-      </NLayoutSider>
-      <NLayoutContent class="main-content">
-        <SplitNode
-          :node="rootNode"
-          :focused-id="focusedId"
-          :closable="false"
-          @navigate="handleNavigate"
-          @split="handleSplit"
-          @close="handleClose"
-          @focus="handleFocus"
-        />
-      </NLayoutContent>
-    </NLayout>
-  </NMessageProvider>
+  <NConfigProvider>
+    <NMessageProvider>
+      <div v-if="loading" class="app-loading">
+        <NSpin/>
+      </div>
+      <div v-else class="app-layout">
+        <div class="app-header"></div>
+        <NDivider style="margin: 0" />
+        <NSplit
+            direction="horizontal"
+            :default-size="'260px'"
+            :min="'180px'"
+            :max="'500px'"
+            :resize-trigger-size="3"
+            :pane-1-style="{ overflow: 'hidden' }"
+            :pane-2-style="{ overflow: 'hidden' }"
+        >
+          <template #[1]>
+            <Sidebar
+                :currentPath="currentPath"
+                :homeDir="homeDir"
+                @navigate="onNavigate"
+            />
+          </template>
+          <template #[2]>
+            <div class="main-content">
+              <SplitNode
+                  :node="rootNode"
+                  :focused-id="focusedId"
+                  :closable="false"
+                  @navigate="handleNavigate"
+                  @split="handleSplit"
+                  @close="handleClose"
+                  @focus="handleFocus"
+              />
+            </div>
+          </template>
+        </NSplit>
+      </div>
+    </NMessageProvider>
+  </NConfigProvider>
 </template>
 
 <style>
@@ -117,6 +133,7 @@ html, body, #app {
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
+  background: rgb(255, 255, 255);
 }
 
 .app-layout {
@@ -133,16 +150,14 @@ html, body, #app {
 }
 
 .main-content {
-  flex: 1;
-  min-width: 0;
+  height: 100%;
   overflow: hidden;
-  padding-top: 50px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
 }
 
-.n-layout-sider {
-  overflow: hidden;
+.app-header {
+  height: 40px;
 }
 </style>

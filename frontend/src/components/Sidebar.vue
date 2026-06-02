@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NTree, NDivider, NText } from 'naive-ui'
+import { NTree, NDivider, NText, NSplit } from 'naive-ui'
 import type { TreeOption } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 
@@ -85,36 +85,44 @@ const quickAccess = computed(() => {
 
 <template>
   <div class="sidebar">
-    <div class="sidebar-header">
-      <NText strong>File Explorer</NText>
-    </div>
-    <NDivider style="margin: 0" />
-    <div class="quick-access">
-      <NText depth="3" class="section-title">Quick Access</NText>
-      <div
-        v-for="item in quickAccess"
-        :key="item.path"
-        class="quick-item"
-        :class="{ active: currentPath === item.path }"
-        @click="emit('navigate', item.path)"
-      >
-        <span class="quick-icon">📁</span>
-        <span class="quick-label">{{ item.label }}</span>
-      </div>
-    </div>
-    <NDivider style="margin: 0" />
-    <div class="tree-wrapper">
-      <NTree
-        :data="treeData"
-        :selected-keys="[currentPath]"
-        :expanded-keys="expandedKeys"
-        :remote="true"
-        :on-load="onLoad"
-        :on-update:expanded-keys="onUpdateExpandedKeys"
-        :on-update:selected-keys="onUpdateSelectedKeys"
-        block-line
-      />
-    </div>
+    <NSplit
+      class="sidebar-split"
+      direction="vertical"
+      :default-size="'170px'"
+      :min="'80px'"
+      :max="'300px'"
+      :resize-trigger-size="3"
+    >
+      <template #[1]>
+        <div class="quick-access">
+          <NText depth="3" class="section-title">快速访问</NText>
+          <div
+            v-for="item in quickAccess"
+            :key="item.path"
+            class="quick-item"
+            :class="{ active: currentPath === item.path }"
+            @click="emit('navigate', item.path)"
+          >
+            <span class="quick-icon">📁</span>
+            <span class="quick-label">{{ item.label }}</span>
+          </div>
+        </div>
+      </template>
+      <template #[2]>
+        <div class="tree-wrapper">
+          <NTree
+            :data="treeData"
+            :selected-keys="[currentPath]"
+            :expanded-keys="expandedKeys"
+            :remote="true"
+            :on-load="onLoad"
+            :on-update:expanded-keys="onUpdateExpandedKeys"
+            :on-update:selected-keys="onUpdateSelectedKeys"
+            block-line
+          />
+        </div>
+      </template>
+    </NSplit>
   </div>
 </template>
 
@@ -125,10 +133,6 @@ const quickAccess = computed(() => {
   flex-direction: column;
   overflow: hidden;
   user-select: none;
-}
-
-.sidebar-header {
-  padding: 50px 16px 12px;
 }
 
 .section-title {
@@ -166,10 +170,14 @@ const quickAccess = computed(() => {
   white-space: nowrap;
 }
 
-.tree-wrapper {
+.sidebar-split {
   flex: 1;
+  min-height: 0;
+}
+
+.tree-wrapper {
+  height: 100%;
   overflow: auto;
   padding: 4px 0;
-  min-height: 0;
 }
 </style>
