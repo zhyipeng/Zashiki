@@ -4,7 +4,7 @@ import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput } from
 import type { DataTableColumns } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 import type { FileEntry } from '../../bindings/zashiki'
-import { CloseSharp, ArrowBackRound, ArrowForwardRound } from '@vicons/material'
+import { CloseSharp, ArrowBackRound, ArrowForwardRound, HomeRound } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
@@ -21,6 +21,7 @@ const props = defineProps<{
   path: string
   closable?: boolean
   separator: string
+  homeDir: string
 }>()
 
 function loadDir(p: string) {
@@ -98,6 +99,7 @@ const historyIndex = ref(-1)
 
 const canGoBack = computed(() => historyIndex.value > 0)
 const canGoForward = computed(() => historyIndex.value < history.value.length - 1)
+const canGoHome = computed(() => !!props.homeDir && props.path !== props.homeDir)
 const canGoUp = computed(() => parentPath.value !== null)
 
 watch(() => props.path, (newPath) => {
@@ -149,6 +151,11 @@ function goForward() {
 function goUp() {
   if (!canGoUp.value) return
   emit('navigate', parentPath.value!)
+}
+
+function goHome() {
+  if (!canGoHome.value) return
+  emit('navigate', props.homeDir)
 }
 
 const parentPath = computed(() => {
@@ -225,6 +232,16 @@ async function onRowDblclick(row: FileEntry) {
         >
           <template #icon>
             <n-icon><ArrowForwardRound/></n-icon>
+          </template>
+        </NButton>
+        <NButton
+          text
+          :disabled="!canGoHome"
+          title="主页"
+          @click="goHome"
+        >
+          <template #icon>
+            <n-icon><HomeRound/></n-icon>
           </template>
         </NButton>
         <NButton

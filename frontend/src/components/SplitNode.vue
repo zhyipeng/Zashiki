@@ -9,6 +9,7 @@ defineProps<{
   focusedId: number
   closable: boolean
   separator: string
+  homeDir: string
 }>()
 
 const emit = defineEmits<{
@@ -38,6 +39,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
         :path="node.path"
         :closable="closable"
         :separator="separator"
+        :home-dir="homeDir"
         @navigate="(path: string) => emit('navigate', node.id, path)"
         @split-h="emit('split', node.id, 'horizontal')"
         @split-v="emit('split', node.id, 'vertical')"
@@ -58,6 +60,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           :focused-id="focusedId"
           :closable="true"
           :separator="separator"
+          :home-dir="homeDir"
           @navigate="(id, path) => emit('navigate', id, path)"
           @split="(id, dir) => emit('split', id, dir)"
           @close="(id) => emit('close', id)"
@@ -70,6 +73,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           :focused-id="focusedId"
           :closable="true"
           :separator="separator"
+          :home-dir="homeDir"
           @navigate="(id, path) => emit('navigate', id, path)"
           @split="(id, dir) => emit('split', id, dir)"
           @close="(id) => emit('close', id)"

@@ -131,6 +131,7 @@ function handleFocus(leafId: number, path: string) {
                   :focused-id="focusedId"
                   :closable="false"
                   :separator="separator"
+                  :home-dir="homeDir"
                   @navigate="handleNavigate"
                   @split="handleSplit"
                   @close="handleClose"
