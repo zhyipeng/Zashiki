@@ -23,24 +23,41 @@ const entries = ref<FileEntry[]>([])
 const loading = ref(false)
 const errorMsg = ref('')
 
-watch(() => props.path, loadDir, { immediate: true })
+// navigation history
+const history = ref<string[]>([])
+const historyIndex = ref(-1)
 
-async function loadDir() {
-  if (!props.path) return
-  loading.value = true
-  errorMsg.value = ''
-  entries.value = []
-  try {
-    const result = await FileService.ListDir(props.path)
-    console.log('ListDir', props.path, '→', result?.length, 'entries')
-    entries.value = result || []
-  } catch (err) {
-    console.error('ListDir failed:', props.path, err)
-    errorMsg.value = String(err)
-  } finally {
-    loading.value = false
+const canGoBack = computed(() => historyIndex.value > 0)
+const canGoForward = computed(() => historyIndex.value < history.value.length - 1)
+const canGoUp = computed(() => parentPath.value !== null)
+
+watch(() => props.path, (newPath) => {
+  if (!newPath) return
+  const existingIndex = history.value.indexOf(newPath)
+  const currentHistoryPath = historyIndex.value >= 0 ? history.value[historyIndex.value] : null
+  if (newPath !== currentHistoryPath) {
+    if (existingIndex >= 0) {
+      historyIndex.value = existingIndex
+    } else {
+      history.value = [...history.value.slice(0, historyIndex.value + 1), newPath]
+      historyIndex.value = history.value.length - 1
+    }
   }
-}
+  if (newPath) {
+    loading.value = true
+    errorMsg.value = ''
+    entries.value = []
+    FileService.ListDir(newPath).then((result) => {
+      console.log('ListDir', newPath, '→', result?.length, 'entries')
+      entries.value = result || []
+    }).catch((err) => {
+      console.error('ListDir failed:', newPath, err)
+      errorMsg.value = String(err)
+    }).finally(() => {
+      loading.value = false
+    })
+  }
+}, { immediate: true })
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '-'
@@ -57,6 +74,23 @@ function formatTime(t: unknown): string {
   } catch {
     return String(t)
   }
+}
+
+function goBack() {
+  if (!canGoBack.value) return
+  historyIndex.value--
+  emit('navigate', history.value[historyIndex.value])
+}
+
+function goForward() {
+  if (!canGoForward.value) return
+  historyIndex.value++
+  emit('navigate', history.value[historyIndex.value])
+}
+
+function goUp() {
+  if (!canGoUp.value) return
+  emit('navigate', parentPath.value!)
 }
 
 const parentPath = computed(() => {
@@ -110,27 +144,27 @@ async function onRowDblclick(row: FileEntry) {
     <div class="toolbar">
       <div class="toolbar-left">
         <NButton
-          v-if="parentPath"
           text
-          @click="emit('navigate', parentPath)"
+          :disabled="!canGoBack"
+          @click="goBack"
         >
           <template #icon>
             <n-icon><ArrowBackRound/></n-icon>
           </template>
         </NButton>
         <NButton
-            v-if="parentPath"
-            text
-            @click="emit('navigate', parentPath)"
+          text
+          :disabled="!canGoForward"
+          @click="goForward"
         >
           <template #icon>
             <n-icon><ArrowForwardRound/></n-icon>
           </template>
         </NButton>
         <NButton
-            v-if="parentPath"
-            text
-            @click="emit('navigate', parentPath)"
+          text
+          :disabled="!canGoUp"
+          @click="goUp"
         >
           <template #icon>
             <n-icon><FolderArrowUp24Regular/></n-icon>
