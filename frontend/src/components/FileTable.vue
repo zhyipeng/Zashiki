@@ -7,6 +7,8 @@ import type { FileEntry } from '../../bindings/zashiki'
 import { CloseSharp, ArrowBackRound, ArrowForwardRound } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
+import { useDragDrop, clearDrag } from '../composables/useDragDrop'
+import DropConfirmModal from './DropConfirmModal.vue'
 
 const { settings } = useSettings()
 const visibleEntries = computed(() => {
@@ -18,6 +20,49 @@ const props = defineProps<{
   path: string
   closable?: boolean
 }>()
+
+function loadDir(p: string) {
+  loading.value = true
+  errorMsg.value = ''
+  pathError.value = false
+  entries.value = []
+  FileService.ListDir(p).then((result) => {
+    console.log('ListDir', p, '→', result?.length, 'entries')
+    entries.value = result || []
+  }).catch((err) => {
+    console.error('ListDir failed:', p, err)
+    errorMsg.value = friendlyError(err, p)
+    pathError.value = true
+  }).finally(() => {
+    loading.value = false
+  })
+}
+
+function refresh() {
+  if (props.path) {
+    loadDir(props.path)
+  }
+}
+
+const {
+  isDragOver, dragLabel, hoveredFolderPath,
+  pendingDrop, confirmDrop, cancelDrop,
+  onRowDragStart,
+  onDragOver, onDragEnter, onDragLeave, onDrop,
+} = useDragDrop(() => props.path, refresh)
+
+const showConfirm = ref(false)
+watch(pendingDrop, (val) => { showConfirm.value = !!val })
+
+function onConfirm(action: 'move' | 'copy', conflict: 'overwrite' | 'skip' | 'rename') {
+  showConfirm.value = false
+  confirmDrop(action, conflict)
+}
+
+function onCancel() {
+  showConfirm.value = false
+  cancelDrop()
+}
 
 const emit = defineEmits<{
   navigate: [path: string]
@@ -66,20 +111,7 @@ watch(() => props.path, (newPath) => {
     }
   }
   if (newPath) {
-    loading.value = true
-    errorMsg.value = ''
-    pathError.value = false
-    entries.value = []
-    FileService.ListDir(newPath).then((result) => {
-      console.log('ListDir', newPath, '→', result?.length, 'entries')
-      entries.value = result || []
-    }).catch((err) => {
-      console.error('ListDir failed:', newPath, err)
-      errorMsg.value = friendlyError(err, newPath)
-      pathError.value = true
-    }).finally(() => {
-      loading.value = false
-    })
+    loadDir(newPath)
   }
 }, { immediate: true })
 
@@ -245,7 +277,16 @@ async function onRowDblclick(row: FileEntry) {
         </NButton>
       </div>
     </div>
-    <div class="table-area">
+    <div
+      class="table-area"
+      @dragover="onDragOver"
+      @dragenter="onDragEnter"
+      @dragleave="onDragLeave"
+      @drop="onDrop"
+    >
+      <div v-if="isDragOver" class="drag-overlay">
+        <span class="drag-label">{{ dragLabel }}</span>
+      </div>
       <NAlert v-if="errorMsg" type="error" :title="errorMsg" class="error-alert" />
       <NSpin v-else-if="loading" class="spin-fill" />
       <NDataTable
@@ -255,6 +296,11 @@ async function onRowDblclick(row: FileEntry) {
         :row-key="(row: FileEntry) => row.path"
         :row-props="(row: FileEntry) => ({
           style: 'cursor: pointer',
+          class: hoveredFolderPath === row.path ? 'drag-target-folder' : '',
+          'data-folder-path': row.isDir ? row.path : undefined,
+          draggable: true,
+          onDragstart: (e: DragEvent) => onRowDragStart(e, row),
+          onDragend: () => clearDrag(),
           onDblclick: () => onRowDblclick(row),
         })"
         :bordered="false"
@@ -266,6 +312,13 @@ async function onRowDblclick(row: FileEntry) {
       />
       <NEmpty v-else description="Empty directory" class="empty-fill" />
     </div>
+    <DropConfirmModal
+      :show="showConfirm"
+      :sources="pendingDrop?.paths || []"
+      :target-dir="pendingDrop?.targetDir || ''"
+      @confirm="onConfirm"
+      @update:show="(v: boolean) => !v && onCancel()"
+    />
   </div>
 </template>
 
@@ -337,5 +390,31 @@ async function onRowDblclick(row: FileEntry) {
 
 .error-alert {
   margin: 16px;
+}
+
+.drag-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.08);
+  border: 2px dashed var(--n-primary-color, #18a058);
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+.drag-label {
+  background: var(--n-primary-color, #18a058);
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+:deep(tr.drag-target-folder) {
+  outline: 2px solid var(--n-primary-color, #18a058);
+  outline-offset: -2px;
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.1) !important;
 }
 </style>

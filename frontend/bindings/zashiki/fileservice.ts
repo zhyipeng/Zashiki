@@ -9,9 +9,19 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function CheckConflicts(paths: string[], destDir: string): $CancellablePromise<string[]> {
+    return $Call.ByID(2845967612, paths, destDir).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
+export function CopyEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<void> {
+    return $Call.ByID(3751035018, paths, destDir, conflict);
+}
+
 export function GetFileInfo(path: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(2925622295, path).then(($result: any) => {
-        return $$createType0($result);
+        return $$createType1($result);
     });
 }
 
@@ -23,10 +33,18 @@ export function GetSeparator(): $CancellablePromise<string> {
     return $Call.ByID(1235100380);
 }
 
+export function IsSameDrive(path1: string, path2: string): $CancellablePromise<boolean> {
+    return $Call.ByID(491311531, path1, path2);
+}
+
 export function ListDir(path: string): $CancellablePromise<$models.FileEntry[]> {
     return $Call.ByID(168987282, path).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType2($result);
     });
+}
+
+export function MoveEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<void> {
+    return $Call.ByID(2941554602, paths, destDir, conflict);
 }
 
 export function OpenFile(path: string): $CancellablePromise<void> {
@@ -34,5 +52,6 @@ export function OpenFile(path: string): $CancellablePromise<void> {
 }
 
 // Private type creation functions
-const $$createType0 = $models.FileEntry.createFrom;
-const $$createType1 = $Create.Array($$createType0);
+const $$createType0 = $Create.Array($Create.Any);
+const $$createType1 = $models.FileEntry.createFrom;
+const $$createType2 = $Create.Array($$createType1);

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -91,4 +93,135 @@ func (f *FileService) GetFileInfo(path string) (FileEntry, error) {
 		IsDir:    info.IsDir(),
 		IsHidden: isHiddenEntry(info.Name(), path),
 	}, nil
+}
+
+func (f *FileService) IsSameDrive(path1, path2 string) bool {
+	return isSameDrive(path1, path2)
+}
+
+func (f *FileService) CheckConflicts(paths []string, destDir string) ([]string, error) {
+	var conflicts []string
+	for _, src := range paths {
+		dst := filepath.Join(destDir, filepath.Base(src))
+		if _, err := os.Stat(dst); err == nil {
+			conflicts = append(conflicts, filepath.Base(src))
+		}
+	}
+	return conflicts, nil
+}
+
+func (f *FileService) CopyEntries(paths []string, destDir string, conflict string) error {
+	log.Printf("CopyEntries to %s, conflict=%s, files: %+v", destDir, conflict, paths)
+	for _, src := range paths {
+		dst := resolveDst(src, destDir, conflict)
+		if dst == "" {
+			continue // skip
+		}
+		if err := copyEntry(src, dst); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *FileService) MoveEntries(paths []string, destDir string, conflict string) error {
+	log.Printf("MoveEntries to %s, conflict=%s, files: %+v", destDir, conflict, paths)
+	for _, src := range paths {
+		dst := resolveDst(src, destDir, conflict)
+		if dst == "" {
+			continue
+		}
+		if err := os.Rename(src, dst); err != nil {
+			if err := copyEntry(src, dst); err != nil {
+				return err
+			}
+			os.RemoveAll(src)
+		}
+	}
+	return nil
+}
+
+func resolveDst(src, destDir, conflict string) string {
+	dst := filepath.Join(destDir, filepath.Base(src))
+	if _, err := os.Stat(dst); os.IsNotExist(err) {
+		return dst
+	}
+	switch conflict {
+	case "skip":
+		return ""
+	case "rename":
+		return uniquePath(dst)
+	default: // overwrite
+		return dst
+	}
+}
+
+func uniquePath(path string) string {
+	ext := filepath.Ext(path)
+	base := path[:len(path)-len(ext)]
+	for i := 1; i < 1000; i++ {
+		candidate := fmt.Sprintf("%s (%d)%s", base, i, ext)
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func copyEntry(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if srcInfo.IsDir() {
+		return copyDir(src, dst)
+	}
+	return copyFile(src, dst)
+}
+
+func copyFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+
+	srcF, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcF.Close()
+
+	dstF, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstF.Close()
+
+	if _, err := dstF.ReadFrom(srcF); err != nil {
+		return err
+	}
+	return dstF.Close()
+}
+
+func copyDir(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+		if err := copyEntry(srcPath, dstPath); err != nil {
+			return err
+		}
+	}
+	return nil
 }
