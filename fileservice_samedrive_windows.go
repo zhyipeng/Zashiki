@@ -3,8 +3,8 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 func isSameDrive(path1, path2 string) bool {
@@ -17,17 +17,13 @@ func isSameDrive(path1, path2 string) bool {
 }
 
 func getVolume(path string) string {
-	if len(path) >= 2 && path[1] == ':' {
-		return strings.ToUpper(path[:2])
+	volume := filepath.VolumeName(path)
+	if volume == "" {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return ""
+		}
+		volume = filepath.VolumeName(abs)
 	}
-	p, err := syscall.UTF16PtrFromString(path)
-	if err != nil {
-		return ""
-	}
-	var serial uint32
-	buf := make([]uint16, syscall.MAX_PATH)
-	if err := syscall.GetVolumeInformation(p, &buf[0], uint32(len(buf)), &serial, nil, nil, nil, 0); err != nil {
-		return ""
-	}
-	return string(syscall.UTF16ToString(buf))
+	return strings.ToUpper(volume)
 }

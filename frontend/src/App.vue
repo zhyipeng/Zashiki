@@ -13,6 +13,7 @@ const showSettings = ref(false)
 
 const currentPath = ref('')
 const homeDir = ref('')
+const separator = ref('/')
 const loading = ref(true)
 const error = ref('')
 
@@ -22,7 +23,12 @@ const focusedId = ref(1)
 
 onMounted(async () => {
   try {
-    homeDir.value = await FileService.GetHomeDir()
+    const [home, sep] = await Promise.all([
+      FileService.GetHomeDir(),
+      FileService.GetSeparator(),
+    ])
+    homeDir.value = home
+    separator.value = sep || '/'
     currentPath.value = homeDir.value
   } catch (err) {
     console.error('GetHomeDir failed:', err)
@@ -110,6 +116,7 @@ function handleFocus(leafId: number, path: string) {
             <Sidebar
                 :currentPath="currentPath"
                 :homeDir="homeDir"
+                :separator="separator"
                 @navigate="onNavigate"
             />
           </template>
@@ -119,6 +126,7 @@ function handleFocus(leafId: number, path: string) {
                   :node="rootNode"
                   :focused-id="focusedId"
                   :closable="false"
+                  :separator="separator"
                   @navigate="handleNavigate"
                   @split="handleSplit"
                   @close="handleClose"

@@ -4,12 +4,14 @@ import { NTree, NDivider, NText, NSplit } from 'naive-ui'
 import type { TreeOption } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 import { useSettings } from '../composables/useSettings'
+import { ancestorPaths, baseName, joinPath, pathRoot } from './path'
 
 const { settings } = useSettings()
 
 const props = defineProps<{
   currentPath: string
   homeDir: string
+  separator: string
 }>()
 
 const emit = defineEmits<{
@@ -21,28 +23,21 @@ const expandedKeys = ref<string[]>([])
 
 watch(() => props.homeDir, (home) => {
   if (!home) return
+  const root = pathRoot(home, props.separator) || props.separator
   treeData.value = [
-    { label: 'Computer', key: '/', isLeaf: false },
-    { label: home.split('/').pop() || 'Home', key: home, isLeaf: false },
+    { label: 'Computer', key: root, isLeaf: false },
+    { label: baseName(home, props.separator) || 'Home', key: home, isLeaf: false },
   ]
 }, { immediate: true })
 
 // 当通过外部方式（Quick Access、FileTable）导航时，展开祖先路径
 watch(() => props.currentPath, (path) => {
   if (!path) return
-  const ancestors: string[] = []
-  const parts = path.split('/').filter(Boolean)
-  let current = ''
-  for (const part of parts) {
-    current += '/' + part
-    if (current !== path) {
-      ancestors.push(current)
-    }
-  }
+  const ancestors = ancestorPaths(path, props.separator)
   // 合并已有的 expandedKeys 和新的祖先路径
   const merged = new Set([...expandedKeys.value, ...ancestors])
   // 同时确保当前路径也在 expandedKeys 中（这样它的子节点可以展开）
-  if (path !== '/') {
+  if (path !== pathRoot(path, props.separator)) {
     merged.add(path)
   }
   expandedKeys.value = Array.from(merged)
@@ -79,9 +74,9 @@ const quickAccess = computed(() => {
   if (!h) return []
   return [
     { label: 'Home', path: h },
-    { label: 'Desktop', path: `${h}/Desktop` },
-    { label: 'Documents', path: `${h}/Documents` },
-    { label: 'Downloads', path: `${h}/Downloads` },
+    { label: 'Desktop', path: joinPath(h, 'Desktop', props.separator) },
+    { label: 'Documents', path: joinPath(h, 'Documents', props.separator) },
+    { label: 'Downloads', path: joinPath(h, 'Downloads', props.separator) },
   ]
 })
 </script>

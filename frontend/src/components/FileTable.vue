@@ -9,6 +9,7 @@ import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regula
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
 import DropConfirmModal from './DropConfirmModal.vue'
+import { parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
 const visibleEntries = computed(() => {
@@ -19,6 +20,7 @@ const visibleEntries = computed(() => {
 const props = defineProps<{
   path: string
   closable?: boolean
+  separator: string
 }>()
 
 function loadDir(p: string) {
@@ -150,9 +152,7 @@ function goUp() {
 }
 
 const parentPath = computed(() => {
-  const p = props.path
-  if (!p || p === '/') return null
-  return p.split('/').slice(0, -1).join('/') || '/'
+  return getParentPath(props.path, props.separator)
 })
 
 const pathInput = ref(props.path)
