@@ -6,6 +6,13 @@ import { FileService } from '../../bindings/zashiki'
 import type { FileEntry } from '../../bindings/zashiki'
 import { CloseSharp, ArrowBackRound, ArrowForwardRound } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular } from '@vicons/fluent'
+import { useSettings } from '../composables/useSettings'
+
+const { settings } = useSettings()
+const visibleEntries = computed(() => {
+  if (settings.showHiddenFiles) return entries.value
+  return entries.value.filter((e: FileEntry) => !e.isHidden)
+})
 
 const props = defineProps<{
   path: string
@@ -242,9 +249,9 @@ async function onRowDblclick(row: FileEntry) {
       <NAlert v-if="errorMsg" type="error" :title="errorMsg" class="error-alert" />
       <NSpin v-else-if="loading" class="spin-fill" />
       <NDataTable
-        v-else-if="entries.length > 0"
+        v-else-if="visibleEntries.length > 0"
         :columns="columns"
-        :data="entries"
+        :data="visibleEntries"
         :row-key="(row: FileEntry) => row.path"
         :row-props="(row: FileEntry) => ({
           style: 'cursor: pointer',

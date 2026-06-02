@@ -3,6 +3,9 @@ import { computed, ref, watch } from 'vue'
 import { NTree, NDivider, NText, NSplit } from 'naive-ui'
 import type { TreeOption } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
+import { useSettings } from '../composables/useSettings'
+
+const { settings } = useSettings()
 
 const props = defineProps<{
   currentPath: string
@@ -53,7 +56,7 @@ async function onLoad(node: TreeOption) {
   try {
     const entries = await FileService.ListDir(node.key as string)
     node.children = entries
-      .filter(e => e.isDir)
+      .filter(e => e.isDir && (settings.showHiddenFiles || !e.isHidden))
       .map(e => ({
         label: e.name,
         key: e.path,

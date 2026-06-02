@@ -10,11 +10,12 @@ import (
 )
 
 type FileEntry struct {
-	Name    string    `json:"name"`
-	Path    string    `json:"path"`
-	Size    int64     `json:"size"`
-	ModTime time.Time `json:"modTime"`
-	IsDir   bool      `json:"isDir"`
+	Name     string    `json:"name"`
+	Path     string    `json:"path"`
+	Size     int64     `json:"size"`
+	ModTime  time.Time `json:"modTime"`
+	IsDir    bool      `json:"isDir"`
+	IsHidden bool      `json:"isHidden"`
 }
 
 type FileService struct{}
@@ -31,12 +32,14 @@ func (f *FileService) ListDir(path string) ([]FileEntry, error) {
 		if err != nil {
 			continue
 		}
+		fullPath := filepath.Join(path, entry.Name())
 		result = append(result, FileEntry{
-			Name:    entry.Name(),
-			Path:    filepath.Join(path, entry.Name()),
-			Size:    info.Size(),
-			ModTime: info.ModTime(),
-			IsDir:   entry.IsDir(),
+			Name:     entry.Name(),
+			Path:     fullPath,
+			Size:     info.Size(),
+			ModTime:  info.ModTime(),
+			IsDir:    entry.IsDir(),
+			IsHidden: isHiddenEntry(entry.Name(), fullPath),
 		})
 	}
 
@@ -81,10 +84,11 @@ func (f *FileService) GetFileInfo(path string) (FileEntry, error) {
 		return FileEntry{}, err
 	}
 	return FileEntry{
-		Name:    info.Name(),
-		Path:    path,
-		Size:    info.Size(),
-		ModTime: info.ModTime(),
-		IsDir:   info.IsDir(),
+		Name:     info.Name(),
+		Path:     path,
+		Size:     info.Size(),
+		ModTime:  info.ModTime(),
+		IsDir:    info.IsDir(),
+		IsHidden: isHiddenEntry(info.Name(), path),
 	}, nil
 }

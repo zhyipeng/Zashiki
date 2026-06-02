@@ -39,6 +39,7 @@ func main() {
 		Description: "A file explorer",
 		Services: []application.Service{
 			application.NewService(&FileService{}),
+			application.NewService(&SettingsService{}),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

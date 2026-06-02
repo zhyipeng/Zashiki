@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import {ref, onMounted, watch} from 'vue'
-import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider} from 'naive-ui'
+import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider, NFlex, NButton, NIcon} from 'naive-ui'
 import Sidebar from './components/Sidebar.vue'
 import SplitNode from './components/SplitNode.vue'
 import {createLeaf, splitLeaf, closeLeaf, navigateLeaf, getFirstLeafId, findLeafById} from './components/tree'
 import type {TreeNode} from './components/tree'
 import {FileService} from '../bindings/zashiki'
+import { Settings28Regular } from '@vicons/fluent'
+import SettingsModal from './components/SettingsModal.vue'
+
+const showSettings = ref(false)
 
 const currentPath = ref('')
 const homeDir = ref('')
@@ -87,7 +91,11 @@ function handleFocus(leafId: number, path: string) {
         <NSpin/>
       </div>
       <div v-else class="app-layout">
-        <div class="app-header"></div>
+        <n-flex class="app-header" justify="end">
+          <n-button text style="font-size: 24px" @click="showSettings = true">
+            <n-icon><Settings28Regular/></n-icon>
+          </n-button>
+        </n-flex>
         <NDivider style="margin: 0" />
         <NSplit
             direction="horizontal"
@@ -119,6 +127,7 @@ function handleFocus(leafId: number, path: string) {
             </div>
           </template>
         </NSplit>
+        <SettingsModal v-model:show="showSettings" />
       </div>
     </NMessageProvider>
   </NConfigProvider>
@@ -159,5 +168,6 @@ html, body, #app {
 
 .app-header {
   height: 40px;
+  padding: 0 15px;
 }
 </style>

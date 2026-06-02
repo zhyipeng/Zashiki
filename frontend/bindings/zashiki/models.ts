@@ -15,6 +15,7 @@ export class FileEntry {
     "size": number;
     "modTime": time$0.Time;
     "isDir": boolean;
+    "isHidden": boolean;
 
     /** Creates a new FileEntry instance. */
     constructor($$source: Partial<FileEntry> = {}) {
@@ -33,6 +34,9 @@ export class FileEntry {
         if (!("isDir" in $$source)) {
             this["isDir"] = false;
         }
+        if (!("isHidden" in $$source)) {
+            this["isHidden"] = false;
+        }
 
         Object.assign(this, $$source);
     }
@@ -43,5 +47,26 @@ export class FileEntry {
     static createFrom($$source: any = {}): FileEntry {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new FileEntry($$parsedSource as Partial<FileEntry>);
+    }
+}
+
+export class Settings {
+    "showHiddenFiles": boolean;
+
+    /** Creates a new Settings instance. */
+    constructor($$source: Partial<Settings> = {}) {
+        if (!("showHiddenFiles" in $$source)) {
+            this["showHiddenFiles"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Settings instance from a string or object.
+     */
+    static createFrom($$source: any = {}): Settings {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new Settings($$parsedSource as Partial<Settings>);
     }
 }
