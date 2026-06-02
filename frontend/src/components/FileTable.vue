@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert } from 'naive-ui'
+import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 import type { FileEntry } from '../../bindings/zashiki'
@@ -22,6 +22,21 @@ const emit = defineEmits<{
 const entries = ref<FileEntry[]>([])
 const loading = ref(false)
 const errorMsg = ref('')
+const pathError = ref(false)
+
+function friendlyError(err: unknown, p: string): string {
+  const msg = String(err).toLowerCase()
+  if (msg.includes('no such file') || msg.includes('not found') || msg.includes('does not exist')) {
+    return `路径不存在: ${p}`
+  }
+  if (msg.includes('not a directory') || msg.includes('not directory')) {
+    return `不是文件夹: ${p}`
+  }
+  if (msg.includes('permission denied') || msg.includes('access denied') || msg.includes('operation not permitted')) {
+    return `权限不足: ${p}`
+  }
+  return String(err)
+}
 
 // navigation history
 const history = ref<string[]>([])
@@ -46,13 +61,15 @@ watch(() => props.path, (newPath) => {
   if (newPath) {
     loading.value = true
     errorMsg.value = ''
+    pathError.value = false
     entries.value = []
     FileService.ListDir(newPath).then((result) => {
       console.log('ListDir', newPath, '→', result?.length, 'entries')
       entries.value = result || []
     }).catch((err) => {
       console.error('ListDir failed:', newPath, err)
-      errorMsg.value = String(err)
+      errorMsg.value = friendlyError(err, newPath)
+      pathError.value = true
     }).finally(() => {
       loading.value = false
     })
@@ -99,6 +116,16 @@ const parentPath = computed(() => {
   return p.split('/').slice(0, -1).join('/') || '/'
 })
 
+const pathInput = ref(props.path)
+watch(() => props.path, (p) => { pathInput.value = p })
+
+function onPathSubmit() {
+  const trimmed = pathInput.value.trim()
+  if (trimmed && trimmed !== props.path) {
+    emit('navigate', trimmed)
+  }
+}
+
 const columns: DataTableColumns<FileEntry> = [
   {
     title: 'Name',
@@ -133,7 +160,7 @@ async function onRowDblclick(row: FileEntry) {
       await FileService.OpenFile(row.path)
     } catch (err) {
       console.error('OpenFile failed:', row.path, err)
-      errorMsg.value = String(err)
+      errorMsg.value = friendlyError(err, row.path)
     }
   }
 }
@@ -170,7 +197,15 @@ async function onRowDblclick(row: FileEntry) {
             <n-icon><FolderArrowUp24Regular/></n-icon>
           </template>
         </NButton>
-        <NText class="path-text">{{ path }}</NText>
+        <NInput
+          class="path-input"
+          v-model:value="pathInput"
+          size="tiny"
+          placeholder="输入路径后回车"
+          :status="pathError ? 'error' : undefined"
+          @keyup.enter="onPathSubmit"
+          @input="pathError = false"
+        />
       </div>
       <div class="toolbar-right">
         <NButton
@@ -261,10 +296,9 @@ async function onRowDblclick(row: FileEntry) {
   flex-shrink: 0;
 }
 
-.path-text {
-  font-size: 13px;
-  font-family: monospace;
-  word-break: break-all;
+.path-input {
+  flex: 1;
+  min-width: 0;
 }
 
 .table-area {

@@ -91,8 +91,8 @@ function handleFocus(leafId: number, path: string) {
         <NDivider style="margin: 0" />
         <NSplit
             direction="horizontal"
-            :default-size="'260px'"
-            :min="'180px'"
+            :default-size="'180px'"
+            :min="'40px'"
             :max="'500px'"
             :resize-trigger-size="3"
             :pane-1-style="{ overflow: 'hidden' }"
