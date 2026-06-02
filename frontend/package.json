@@ -18,6 +18,8 @@
     "vue": "^3.2.45"
   },
   "devDependencies": {
+    "@vicons/fluent": "^0.13.0",
+    "@vicons/material": "^0.13.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "@vue/test-utils": "^2.4.10",
     "jsdom": "^29.1.1",

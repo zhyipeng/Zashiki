@@ -10,6 +10,8 @@
         "vue": "^3.2.45",
       },
       "devDependencies": {
+        "@vicons/fluent": "^0.13.0",
+        "@vicons/material": "^0.13.0",
         "@vitejs/plugin-vue": "^6.0.0",
         "@vue/test-utils": "^2.4.10",
         "jsdom": "^29.1.1",
@@ -124,6 +126,10 @@
     "@types/lodash": ["@types/lodash@4.17.24", "https://registry.npmmirror.com/@types/lodash/-/lodash-4.17.24.tgz", {}, "sha512-gIW7lQLZbue7lRSWEFql49QJJWThrTFFeIMJdp3eH4tKoxm1OvEPg02rm4wCCSHS0cL3/Fizimb35b7k8atwsQ=="],
 
     "@types/lodash-es": ["@types/lodash-es@4.17.12", "https://registry.npmmirror.com/@types/lodash-es/-/lodash-es-4.17.12.tgz", { "dependencies": { "@types/lodash": "*" } }, "sha512-0NgftHUcV4v34VhXm8QBSftKVXtbkBG3ViCjs6+eJ5a6y6Mi/jiFGPc1sC7QK+9BFhWrURE3EOggmWaSxL9OzQ=="],
+
+    "@vicons/fluent": ["@vicons/fluent@0.13.0", "https://registry.npmmirror.com/@vicons/fluent/-/fluent-0.13.0.tgz", {}, "sha512-bYGZsOE3qzvm3Cm43e7tybgGlr5ZUpYqtRZq0g0Tfupe8jIzLolpvQLNUt1zS8Mgt6goTbUk5YH7Fkv16jkykg=="],
+
+    "@vicons/material": ["@vicons/material@0.13.0", "https://registry.npmmirror.com/@vicons/material/-/material-0.13.0.tgz", {}, "sha512-lKVxFNprM+CaBkUH3gt6VjIeiMsKQl2zARQMwTCZruQl2vRHzyeZiKeCflWS99CEfv2JzX/6y697smxlzyxcVw=="],
 
     "@vitejs/plugin-vue": ["@vitejs/plugin-vue@6.0.7", "https://registry.npmmirror.com/@vitejs/plugin-vue/-/plugin-vue-6.0.7.tgz", { "dependencies": { "@rolldown/pluginutils": "^1.0.1" }, "peerDependencies": { "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0", "vue": "^3.2.25" } }, "sha512-km+p+XdSz9Sxm5rqUbqcSfZYaAniKxWBj1KURl+Jr7UaPvvX7BmaWMdP69I5rrFDeQGyxAG7NXdc57vz+snhWg=="],
 

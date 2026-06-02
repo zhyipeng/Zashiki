@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { NDataTable, NButton, NText, NSpin, NSpace, NEmpty, NAlert } from 'naive-ui'
+import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 import type { FileEntry } from '../../bindings/zashiki'
+import { CloseSharp, ArrowBackRound } from '@vicons/material'
+import { SplitVertical28Regular, SplitHorizontal28Regular } from '@vicons/fluent'
 
 const props = defineProps<{
   path: string
@@ -108,38 +110,44 @@ async function onRowDblclick(row: FileEntry) {
     <div class="toolbar">
       <div class="toolbar-left">
         <NButton
-          v-if="closable"
-          text
-          size="tiny"
-          @click="emit('close')"
-        >
-          &times;
-        </NButton>
-        <NButton
           v-if="parentPath"
           text
           @click="emit('navigate', parentPath)"
         >
-          &larr;
+          <template #icon>
+            <n-icon><ArrowBackRound/></n-icon>
+          </template>
         </NButton>
         <NText class="path-text">{{ path }}</NText>
       </div>
       <div class="toolbar-right">
         <NButton
           text
-          size="tiny"
           title="竖直分屏"
           @click="emit('splitV')"
         >
-          ⬌
+          <template #icon>
+            <n-icon><SplitHorizontal28Regular/></n-icon>
+          </template>
         </NButton>
         <NButton
           text
-          size="tiny"
           title="水平分屏"
           @click="emit('splitH')"
         >
-          ⬍
+          <template #icon>
+            <n-icon><SplitVertical28Regular/></n-icon>
+          </template>
+        </NButton>
+        <NButton
+            v-if="closable"
+            text
+            type="error"
+            @click="emit('close')"
+        >
+          <template #icon>
+            <n-icon><CloseSharp/></n-icon>
+          </template>
         </NButton>
       </div>
     </div>
@@ -197,7 +205,7 @@ async function onRowDblclick(row: FileEntry) {
 .toolbar-right {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
