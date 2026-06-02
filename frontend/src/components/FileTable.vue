@@ -4,8 +4,8 @@ import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert } from 'naive-
 import type { DataTableColumns } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 import type { FileEntry } from '../../bindings/zashiki'
-import { CloseSharp, ArrowBackRound } from '@vicons/material'
-import { SplitVertical28Regular, SplitHorizontal28Regular } from '@vicons/fluent'
+import { CloseSharp, ArrowBackRound, ArrowForwardRound } from '@vicons/material'
+import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular } from '@vicons/fluent'
 
 const props = defineProps<{
   path: string
@@ -116,6 +116,24 @@ async function onRowDblclick(row: FileEntry) {
         >
           <template #icon>
             <n-icon><ArrowBackRound/></n-icon>
+          </template>
+        </NButton>
+        <NButton
+            v-if="parentPath"
+            text
+            @click="emit('navigate', parentPath)"
+        >
+          <template #icon>
+            <n-icon><ArrowForwardRound/></n-icon>
+          </template>
+        </NButton>
+        <NButton
+            v-if="parentPath"
+            text
+            @click="emit('navigate', parentPath)"
+        >
+          <template #icon>
+            <n-icon><FolderArrowUp24Regular/></n-icon>
           </template>
         </NButton>
         <NText class="path-text">{{ path }}</NText>
