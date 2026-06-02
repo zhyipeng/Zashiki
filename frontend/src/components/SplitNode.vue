@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { NSplit } from 'naive-ui'
 import FileTable from './FileTable.vue'
 import type { TreeNode } from './tree'
 import { isLeaf } from './tree'
@@ -15,6 +16,13 @@ const emit = defineEmits<{
   close: [id: number]
   focus: [id: number, path: string]
 }>()
+
+// Our direction → NSplit direction:
+//   horizontal (stacked top/bottom) → NSplit vertical
+//   vertical (side by side)        → NSplit horizontal
+function nsDir(dir: 'horizontal' | 'vertical') {
+  return dir === 'horizontal' ? 'vertical' : 'horizontal'
+}
 </script>
 
 <template>
@@ -22,7 +30,7 @@ const emit = defineEmits<{
     <div
       v-if="isLeaf(node)"
       class="leaf-wrapper"
-      :class="{ dimmed: !closable ? false : node.id !== focusedId }"
+      :class="{ dimmed: closable && node.id !== focusedId }"
       @mousedown="emit('focus', node.id, node.path)"
     >
       <FileTable
@@ -34,33 +42,41 @@ const emit = defineEmits<{
         @close="emit('close', node.id)"
       />
     </div>
-    <div
+    <NSplit
       v-else
-      class="split-wrapper"
-      :class="node.direction"
+      :direction="nsDir(node.direction)"
+      :default-size="0.5"
+      :resize-trigger-size="4"
+      :pane-1-style="{ overflow: 'hidden' }"
+      :pane-2-style="{ overflow: 'hidden' }"
     >
-      <SplitNode
-        v-for="(child, index) in node.children"
-        :key="child.id"
-        :node="child"
-        :focused-id="focusedId"
-        :closable="true"
-        :class="{
-          'split-child': true,
-          'split-child-first': index === 0,
-          'split-child-last': index === node.children.length - 1,
-        }"
-        @navigate="(id, path) => emit('navigate', id, path)"
-        @split="(id, dir) => emit('split', id, dir)"
-        @close="(id) => emit('close', id)"
-        @focus="(id, path) => emit('focus', id, path)"
-      />
-    </div>
+      <template #[1]>
+        <SplitNode
+          :node="node.children[0]"
+          :focused-id="focusedId"
+          :closable="true"
+          @navigate="(id, path) => emit('navigate', id, path)"
+          @split="(id, dir) => emit('split', id, dir)"
+          @close="(id) => emit('close', id)"
+          @focus="(id, path) => emit('focus', id, path)"
+        />
+      </template>
+      <template #[2]>
+        <SplitNode
+          :node="node.children[1]"
+          :focused-id="focusedId"
+          :closable="true"
+          @navigate="(id, path) => emit('navigate', id, path)"
+          @split="(id, dir) => emit('split', id, dir)"
+          @close="(id) => emit('close', id)"
+          @focus="(id, path) => emit('focus', id, path)"
+        />
+      </template>
+    </NSplit>
   </div>
 </template>
 
 <script lang="ts">
-// recursive self-reference
 export default { name: 'SplitNode' }
 </script>
 
@@ -85,35 +101,5 @@ export default { name: 'SplitNode' }
 
 .leaf-wrapper.dimmed {
   opacity: 0.5;
-}
-
-.split-wrapper {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-  min-width: 0;
-}
-
-.split-wrapper.horizontal {
-  flex-direction: column;
-}
-
-.split-wrapper.vertical {
-  flex-direction: row;
-}
-
-.split-child {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.split-wrapper.horizontal > .split-child + .split-child {
-  border-top: 2px solid var(--n-border-color);
-}
-
-.split-wrapper.vertical > .split-child + .split-child {
-  border-left: 2px solid var(--n-border-color);
 }
 </style>

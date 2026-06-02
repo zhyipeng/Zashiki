@@ -179,7 +179,7 @@ async function onRowDblclick(row: FileEntry) {
           @click="emit('splitV')"
         >
           <template #icon>
-            <n-icon><SplitHorizontal28Regular/></n-icon>
+            <n-icon><SplitVertical28Regular/></n-icon>
           </template>
         </NButton>
         <NButton
@@ -188,7 +188,7 @@ async function onRowDblclick(row: FileEntry) {
           @click="emit('splitH')"
         >
           <template #icon>
-            <n-icon><SplitVertical28Regular/></n-icon>
+            <n-icon><SplitHorizontal28Regular/></n-icon>
           </template>
         </NButton>
         <NButton
