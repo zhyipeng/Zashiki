@@ -123,11 +123,12 @@ const quickAccess = computed(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   user-select: none;
 }
 
 .sidebar-header {
-  padding: 16px 16px 12px;
+  padding: 50px 16px 12px;
 }
 
 .section-title {
@@ -169,5 +170,6 @@ const quickAccess = computed(() => {
   flex: 1;
   overflow: auto;
   padding: 4px 0;
+  min-height: 0;
 }
 </style>

@@ -34,7 +34,7 @@ function onNavigate(path: string) {
       <NSpin />
     </div>
     <NLayout v-else has-sider class="app-layout">
-      <NLayoutSider width="260" bordered :native-scrollbar="false">
+      <NLayoutSider width="260" bordered>
         <Sidebar
           :currentPath="currentPath"
           :homeDir="homeDir"
@@ -78,6 +78,10 @@ html, body, #app {
 .main-content {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+}
+
+.n-layout-sider {
   overflow: hidden;
 }
 </style>

@@ -130,6 +130,7 @@ async function onRowDblclick(row: FileEntry) {
         :single-line="false"
         size="small"
         flex-height
+        :virtual-scroll="true"
         class="data-table"
       />
       <NEmpty v-else description="Empty directory" class="empty-fill" />
@@ -146,7 +147,7 @@ async function onRowDblclick(row: FileEntry) {
 }
 
 .toolbar {
-  padding: 8px 16px;
+  padding: 50px 16px 8px;
   border-bottom: 1px solid var(--n-border-color);
   background: var(--n-color-embedded);
   flex-shrink: 0;
