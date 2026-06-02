@@ -10,5 +10,6 @@ export {
 
 export {
     FileEntry,
+    RootEntry,
     Settings
 } from "./models.js";

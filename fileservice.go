@@ -20,6 +20,13 @@ type FileEntry struct {
 	IsHidden bool      `json:"isHidden"`
 }
 
+type RootEntry struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	FreeSpace  uint64 `json:"freeSpace"`
+	TotalSpace uint64 `json:"totalSpace"`
+}
+
 type FileService struct{}
 
 func (f *FileService) ListDir(path string) ([]FileEntry, error) {
@@ -78,6 +85,10 @@ func (f *FileService) GetHomeDir() string {
 
 func (f *FileService) GetSeparator() string {
 	return string(filepath.Separator)
+}
+
+func (f *FileService) GetRoots() []RootEntry {
+	return getRoots()
 }
 
 func (f *FileService) GetFileInfo(path string) (FileEntry, error) {

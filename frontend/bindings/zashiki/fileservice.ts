@@ -29,6 +29,12 @@ export function GetHomeDir(): $CancellablePromise<string> {
     return $Call.ByID(3279025189);
 }
 
+export function GetRoots(): $CancellablePromise<$models.RootEntry[]> {
+    return $Call.ByID(3710679330).then(($result: any) => {
+        return $$createType3($result);
+    });
+}
+
 export function GetSeparator(): $CancellablePromise<string> {
     return $Call.ByID(1235100380);
 }
@@ -39,7 +45,7 @@ export function IsSameDrive(path1: string, path2: string): $CancellablePromise<b
 
 export function ListDir(path: string): $CancellablePromise<$models.FileEntry[]> {
     return $Call.ByID(168987282, path).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType4($result);
     });
 }
 
@@ -54,4 +60,6 @@ export function OpenFile(path: string): $CancellablePromise<void> {
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = $models.FileEntry.createFrom;
-const $$createType2 = $Create.Array($$createType1);
+const $$createType2 = $models.RootEntry.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = $Create.Array($$createType1);

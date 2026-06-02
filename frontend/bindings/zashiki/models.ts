@@ -50,6 +50,39 @@ export class FileEntry {
     }
 }
 
+export class RootEntry {
+    "name": string;
+    "path": string;
+    "freeSpace": number;
+    "totalSpace": number;
+
+    /** Creates a new RootEntry instance. */
+    constructor($$source: Partial<RootEntry> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("freeSpace" in $$source)) {
+            this["freeSpace"] = 0;
+        }
+        if (!("totalSpace" in $$source)) {
+            this["totalSpace"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RootEntry instance from a string or object.
+     */
+    static createFrom($$source: any = {}): RootEntry {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RootEntry($$parsedSource as Partial<RootEntry>);
+    }
+}
+
 export class Settings {
     "showHiddenFiles": boolean;
 

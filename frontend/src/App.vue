@@ -14,6 +14,7 @@ const showSettings = ref(false)
 const currentPath = ref('')
 const homeDir = ref('')
 const separator = ref('/')
+const roots = ref<{ name: string, path: string, freeSpace: number, totalSpace: number }[]>([])
 const loading = ref(true)
 const error = ref('')
 
@@ -23,12 +24,14 @@ const focusedId = ref(1)
 
 onMounted(async () => {
   try {
-    const [home, sep] = await Promise.all([
+    const [home, sep, rootDirs] = await Promise.all([
       FileService.GetHomeDir(),
       FileService.GetSeparator(),
+      FileService.GetRoots(),
     ])
     homeDir.value = home
     separator.value = sep || '/'
+    roots.value = rootDirs || []
     currentPath.value = homeDir.value
   } catch (err) {
     console.error('GetHomeDir failed:', err)
@@ -117,6 +120,7 @@ function handleFocus(leafId: number, path: string) {
                 :currentPath="currentPath"
                 :homeDir="homeDir"
                 :separator="separator"
+                :roots="roots"
                 @navigate="onNavigate"
             />
           </template>

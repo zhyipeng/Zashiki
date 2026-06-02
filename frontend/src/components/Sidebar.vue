@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, h, ref, watch } from 'vue'
 import { NTree, NDivider, NText, NSplit } from 'naive-ui'
 import type { TreeOption } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 import { useSettings } from '../composables/useSettings'
-import { ancestorPaths, baseName, joinPath, pathRoot } from './path'
+import { ancestorPaths, joinPath, pathRoot } from './path'
+
+type RootInfo = { name: string, path: string, freeSpace: number, totalSpace: number }
 
 const { settings } = useSettings()
 
@@ -12,6 +14,7 @@ const props = defineProps<{
   currentPath: string
   homeDir: string
   separator: string
+  roots: RootInfo[]
 }>()
 
 const emit = defineEmits<{
@@ -20,15 +23,43 @@ const emit = defineEmits<{
 
 const treeData = ref<TreeOption[]>([])
 const expandedKeys = ref<string[]>([])
+const rootByPath = computed(() => new Map(props.roots.map(root => [root.path, root])))
 
-watch(() => props.homeDir, (home) => {
-  if (!home) return
-  const root = pathRoot(home, props.separator) || props.separator
-  treeData.value = [
-    { label: 'Computer', key: root, isLeaf: false },
-    { label: baseName(home, props.separator) || 'Home', key: home, isLeaf: false },
-  ]
+watch(() => [props.homeDir, props.separator, props.roots] as const, ([home, separator, roots]) => {
+  const homeRoot = home ? pathRoot(home, separator) : ''
+  const rootEntries = roots.length > 0
+    ? roots
+    : [{ name: homeRoot || separator, path: homeRoot || separator, freeSpace: 0, totalSpace: 0 }]
+  const seen = new Set<string>()
+  treeData.value = rootEntries
+    .filter(root => {
+      if (!root.path || seen.has(root.path)) return false
+      seen.add(root.path)
+      return true
+    })
+    .map(root => ({
+      label: root.name || root.path,
+      key: root.path,
+      isLeaf: false,
+    }))
 }, { immediate: true })
+
+function renderTreeLabel({ option }: { option: TreeOption }) {
+  const key = typeof option.key === 'string' ? option.key : String(option.key)
+  const root = rootByPath.value.get(key)
+  if (!root || !root.totalSpace) return option.label as string
+
+  const usedPercent = Math.min(
+    100,
+    Math.max(0, Math.round(((root.totalSpace - root.freeSpace) / root.totalSpace) * 100)),
+  )
+  return h('div', {
+    class: 'root-label',
+    style: { '--used-percent': `${usedPercent}%` },
+  }, [
+    h('span', { class: 'root-title' }, root.name || root.path),
+  ])
+}
 
 // 当通过外部方式（Quick Access、FileTable）导航时，展开祖先路径
 watch(() => props.currentPath, (path) => {
@@ -114,6 +145,7 @@ const quickAccess = computed(() => {
             :expanded-keys="expandedKeys"
             :remote="true"
             :on-load="onLoad"
+            :render-label="renderTreeLabel"
             :on-update:expanded-keys="onUpdateExpandedKeys"
             :on-update:selected-keys="onUpdateSelectedKeys"
             block-line
@@ -177,5 +209,30 @@ const quickAccess = computed(() => {
   height: 100%;
   overflow: auto;
   padding: 4px 0;
+}
+
+:deep(.root-label) {
+  width: 100%;
+  min-width: 120px;
+  padding: 2px 6px;
+  margin: 1px 0;
+  border-radius: 4px;
+  box-sizing: border-box;
+  background:
+    linear-gradient(
+      to right,
+      #E7F5EE 0,
+      #E7F5EE var(--used-percent),
+      transparent var(--used-percent),
+      transparent 100%
+    );
+}
+
+:deep(.root-title) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 18px;
 }
 </style>
