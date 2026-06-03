@@ -4,7 +4,7 @@ import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NDrop
 import type { DataTableColumns, DropdownOption } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 import type { FileEntry } from '../../bindings/zashiki'
-import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp } from '@vicons/material'
+import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
@@ -86,6 +86,9 @@ const entries = ref<FileEntry[]>([])
 const loading = ref(false)
 const errorMsg = ref('')
 const pathError = ref(false)
+const multiSelectMode = ref(false)
+const selectedRowKeys = ref<string[]>([])
+const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
 type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'copy' | 'cut' | 'delete'
 
@@ -110,7 +113,7 @@ const createFolderModal = ref({
 })
 const deleteConfirmModal = ref({
   show: false,
-  entry: null as FileEntry | null,
+  entries: [] as FileEntry[],
 })
 
 const contextMenuActions: ContextMenuAction[] = [
@@ -161,7 +164,7 @@ const contextMenuActions: ContextMenuAction[] = [
     targets: ['entry'],
     run: async (target) => {
       if (target.kind !== 'entry') return
-      await openEntry(target.entry)
+      await openEntries(operationEntriesForEntry(target.entry))
     },
   },
   {
@@ -170,7 +173,8 @@ const contextMenuActions: ContextMenuAction[] = [
     targets: ['entry'],
     run: (target) => {
       if (target.kind !== 'entry') return
-      fileClipboard.setClipboard([target.entry.path], 'copy')
+      const paths = operationEntriesForEntry(target.entry).map(entry => entry.path)
+      fileClipboard.setClipboard(paths, 'copy')
       message.success('已复制到应用剪贴板')
     },
   },
@@ -180,7 +184,8 @@ const contextMenuActions: ContextMenuAction[] = [
     targets: ['entry'],
     run: (target) => {
       if (target.kind !== 'entry') return
-      fileClipboard.setClipboard([target.entry.path], 'cut')
+      const paths = operationEntriesForEntry(target.entry).map(entry => entry.path)
+      fileClipboard.setClipboard(paths, 'cut')
       message.success('已剪切到应用剪贴板')
     },
   },
@@ -190,7 +195,7 @@ const contextMenuActions: ContextMenuAction[] = [
     targets: ['entry'],
     run: (target) => {
       if (target.kind !== 'entry') return
-      openDeleteConfirmModal(target.entry)
+      openDeleteConfirmModal(operationEntriesForEntry(target.entry))
     },
   },
 ]
@@ -232,6 +237,7 @@ const canGoUp = computed(() => parentPath.value !== null)
 
 watch(() => props.path, (newPath) => {
   if (!newPath) return
+  exitMultiSelectMode()
   const existingIndex = history.value.indexOf(newPath)
   const currentHistoryPath = historyIndex.value >= 0 ? history.value[historyIndex.value] : null
   if (newPath !== currentHistoryPath) {
@@ -300,7 +306,7 @@ function onPathSubmit() {
   }
 }
 
-const columns: DataTableColumns<FileEntry> = [
+const baseColumns: DataTableColumns<FileEntry> = [
   {
     title: 'Name',
     key: 'name',
@@ -326,8 +332,19 @@ const columns: DataTableColumns<FileEntry> = [
   },
 ]
 
+const columns = computed<DataTableColumns<FileEntry>>(() => {
+  if (!multiSelectMode.value) return baseColumns
+  return [
+    {
+      type: 'selection',
+      width: 36,
+    },
+    ...baseColumns,
+  ]
+})
+
 async function onRowDblclick(row: FileEntry) {
-  await openEntry(row)
+  await openEntries(operationEntriesForEntry(row))
 }
 
 async function openEntry(row: FileEntry) {
@@ -341,6 +358,69 @@ async function openEntry(row: FileEntry) {
       errorMsg.value = friendlyError(err, row.path)
     }
   }
+}
+
+async function openEntries(rows: FileEntry[]) {
+  if (rows.length === 1) {
+    await openEntry(rows[0])
+    return
+  }
+  for (const row of rows) {
+    await FileService.OpenFile(row.path)
+  }
+}
+
+function toggleMultiSelectMode() {
+  multiSelectMode.value = !multiSelectMode.value
+  if (!multiSelectMode.value) {
+    selectedRowKeys.value = []
+  }
+}
+
+function exitMultiSelectMode() {
+  if (!multiSelectMode.value && selectedRowKeys.value.length === 0) return
+  multiSelectMode.value = false
+  selectedRowKeys.value = []
+}
+
+function onUpdateCheckedRowKeys(keys: Array<string | number>) {
+  selectedRowKeys.value = keys.map(key => String(key))
+}
+
+function onRowClick(e: MouseEvent, row: FileEntry) {
+  if (!multiSelectMode.value) return
+  const target = e.target as HTMLElement | null
+  if (target?.closest('.n-checkbox, button, input, textarea, a')) return
+  toggleSelectedRow(row.path)
+}
+
+function toggleSelectedRow(path: string) {
+  const selected = selectedPathSet.value
+  if (selected.has(path)) {
+    selectedRowKeys.value = selectedRowKeys.value.filter(key => key !== path)
+  } else {
+    selectedRowKeys.value = [...selectedRowKeys.value, path]
+  }
+}
+
+function selectedEntries() {
+  const selected = selectedPathSet.value
+  return entries.value.filter(entry => selected.has(entry.path))
+}
+
+function operationEntriesForEntry(entry: FileEntry): FileEntry[] {
+  if (multiSelectMode.value && selectedPathSet.value.has(entry.path)) {
+    const selected = selectedEntries()
+    if (selected.length > 0) return selected
+  }
+  if (multiSelectMode.value) {
+    exitMultiSelectMode()
+  }
+  return [entry]
+}
+
+function dragPathsForRow(row: FileEntry): string[] {
+  return operationEntriesForEntry(row).map(entry => entry.path)
 }
 
 function showContextMenu(e: MouseEvent, target: ContextTarget) {
@@ -362,6 +442,9 @@ function onTableContextMenu(e: MouseEvent) {
 
 function onRowContextMenu(e: MouseEvent, row: FileEntry) {
   e.stopPropagation()
+  if (multiSelectMode.value && !selectedPathSet.value.has(row.path)) {
+    exitMultiSelectMode()
+  }
   showContextMenu(e, { kind: 'entry', entry: row })
 }
 
@@ -394,10 +477,10 @@ async function confirmCreateFolder() {
   }
 }
 
-function openDeleteConfirmModal(entry: FileEntry) {
+function openDeleteConfirmModal(entries: FileEntry[]) {
   deleteConfirmModal.value = {
     show: true,
-    entry,
+    entries,
   }
 }
 
@@ -406,10 +489,10 @@ function closeDeleteConfirmModal() {
 }
 
 async function confirmDeleteEntry() {
-  const entry = deleteConfirmModal.value.entry
-  if (!entry) return
+  const entries = deleteConfirmModal.value.entries
+  if (entries.length === 0) return
   try {
-    const deletedPaths = await FileService.DeleteEntries([entry.path])
+    const deletedPaths = await FileService.DeleteEntries(entries.map(entry => entry.path))
     closeDeleteConfirmModal()
     removeEntries(deletedPaths)
   } catch (err) {
@@ -421,6 +504,7 @@ async function confirmDeleteEntry() {
 function removeEntries(paths: string[]) {
   const deleted = new Set(paths)
   entries.value = entries.value.filter(entry => !deleted.has(entry.path))
+  selectedRowKeys.value = selectedRowKeys.value.filter(path => !deleted.has(path))
 }
 
 async function onContextMenuSelect(key: string | number) {
@@ -512,6 +596,16 @@ function friendlyActionError(err: unknown): string {
           @keyup.enter="onPathSubmit"
           @input="pathError = false"
         />
+        <NButton
+          text
+          :type="multiSelectMode ? 'primary' : 'default'"
+          title="多选"
+          @click="toggleMultiSelectMode"
+        >
+          <template #icon>
+            <n-icon><ChecklistOutlined/></n-icon>
+          </template>
+        </NButton>
       </div>
       <div class="toolbar-right">
         <NButton
@@ -562,21 +656,25 @@ function friendlyActionError(err: unknown): string {
         :columns="columns"
         :data="visibleEntries"
         :row-key="(row: FileEntry) => row.path"
+        :checked-row-keys="selectedRowKeys"
+        :on-update:checked-row-keys="onUpdateCheckedRowKeys"
         :row-props="(row: FileEntry) => ({
           style: 'cursor: pointer',
           class: [
             hoveredFolderPath === row.path ? 'drag-target-folder' : '',
+            selectedPathSet.has(row.path) ? 'selected-entry' : '',
             cutPathSet.has(row.path) ? 'cut-entry' : '',
           ].filter(Boolean).join(' '),
           'data-folder-path': row.isDir ? row.path : undefined,
           draggable: true,
-          onDragstart: (e: DragEvent) => onRowDragStart(e, row),
+          onDragstart: (e: DragEvent) => onRowDragStart(e, row, dragPathsForRow(row)),
           onDragend: () => clearDrag(),
+          onClick: (e: MouseEvent) => onRowClick(e, row),
           onDblclick: () => onRowDblclick(row),
           onContextmenu: (e: MouseEvent) => onRowContextMenu(e, row),
         })"
         :bordered="false"
-        :single-line="false"
+        single-line
         size="small"
         flex-height
         :virtual-scroll="true"
@@ -629,7 +727,12 @@ function friendlyActionError(err: unknown): string {
       style="width: 360px"
     >
       <div class="modal-body">
-        确定删除「{{ deleteConfirmModal.entry?.name }}」吗？
+        <template v-if="deleteConfirmModal.entries.length === 1">
+          确定删除「{{ deleteConfirmModal.entries[0]?.name }}」吗？
+        </template>
+        <template v-else>
+          确定删除选中的 {{ deleteConfirmModal.entries.length }} 项吗？
+        </template>
       </div>
       <template #footer>
         <NSpace justify="end">
@@ -739,6 +842,14 @@ function friendlyActionError(err: unknown): string {
   outline: 2px solid var(--n-primary-color, #18a058);
   outline-offset: -2px;
   background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.1) !important;
+}
+
+:deep(tr.selected-entry td) {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.14) !important;
+}
+
+:deep(tr.selected-entry:hover td) {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.18) !important;
 }
 
 :deep(tr.cut-entry td) {

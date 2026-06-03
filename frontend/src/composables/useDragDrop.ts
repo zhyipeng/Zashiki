@@ -47,8 +47,11 @@ export function useDragDrop(currentPath: () => string, onChanged: () => void) {
 
   // ---- drag source ----
 
-  function onRowDragStart(e: DragEvent, entry: FileEntry) {
-    const payload: DragPayload = { paths: [entry.path], sourcePanel: currentPath() }
+  function onRowDragStart(e: DragEvent, entry: FileEntry, paths?: string[]) {
+    const payload: DragPayload = {
+      paths: paths && paths.length > 0 ? paths : [entry.path],
+      sourcePanel: currentPath(),
+    }
     dragPayload.value = payload
     hoveredFolderPath.value = ''
     e.dataTransfer!.setData(DRAG_MIME, JSON.stringify(payload))
