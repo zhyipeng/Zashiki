@@ -16,6 +16,9 @@ export class FileEntry {
     "modTime": time$0.Time;
     "isDir": boolean;
     "isHidden": boolean;
+    "isSymlink": boolean;
+    "linkTarget": string;
+    "isExecutable": boolean;
 
     /** Creates a new FileEntry instance. */
     constructor($$source: Partial<FileEntry> = {}) {
@@ -36,6 +39,15 @@ export class FileEntry {
         }
         if (!("isHidden" in $$source)) {
             this["isHidden"] = false;
+        }
+        if (!("isSymlink" in $$source)) {
+            this["isSymlink"] = false;
+        }
+        if (!("linkTarget" in $$source)) {
+            this["linkTarget"] = "";
+        }
+        if (!("isExecutable" in $$source)) {
+            this["isExecutable"] = false;
         }
 
         Object.assign(this, $$source);

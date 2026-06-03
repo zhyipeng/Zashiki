@@ -13,12 +13,15 @@ import (
 )
 
 type FileEntry struct {
-	Name     string    `json:"name"`
-	Path     string    `json:"path"`
-	Size     int64     `json:"size"`
-	ModTime  time.Time `json:"modTime"`
-	IsDir    bool      `json:"isDir"`
-	IsHidden bool      `json:"isHidden"`
+	Name         string    `json:"name"`
+	Path         string    `json:"path"`
+	Size         int64     `json:"size"`
+	ModTime      time.Time `json:"modTime"`
+	IsDir        bool      `json:"isDir"`
+	IsHidden     bool      `json:"isHidden"`
+	IsSymlink    bool      `json:"isSymlink"`
+	LinkTarget   string    `json:"linkTarget"`
+	IsExecutable bool      `json:"isExecutable"`
 }
 
 type RootEntry struct {
@@ -38,19 +41,12 @@ func (f *FileService) ListDir(path string) ([]FileEntry, error) {
 
 	result := make([]FileEntry, 0, len(entries))
 	for _, entry := range entries {
-		info, err := entry.Info()
+		fullPath := filepath.Join(path, entry.Name())
+		info, err := os.Lstat(fullPath)
 		if err != nil {
 			continue
 		}
-		fullPath := filepath.Join(path, entry.Name())
-		result = append(result, FileEntry{
-			Name:     entry.Name(),
-			Path:     fullPath,
-			Size:     info.Size(),
-			ModTime:  info.ModTime(),
-			IsDir:    entry.IsDir(),
-			IsHidden: isHiddenEntry(entry.Name(), fullPath),
-		})
+		result = append(result, fileEntryFromInfo(entry.Name(), fullPath, info))
 	}
 
 	sort.Slice(result, func(i, j int) bool {
@@ -115,22 +111,52 @@ func (f *FileService) GetRoots() []RootEntry {
 }
 
 func (f *FileService) GetFileInfo(path string) (FileEntry, error) {
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return FileEntry{}, err
 	}
-	return FileEntry{
-		Name:     info.Name(),
-		Path:     path,
-		Size:     info.Size(),
-		ModTime:  info.ModTime(),
-		IsDir:    info.IsDir(),
-		IsHidden: isHiddenEntry(info.Name(), path),
-	}, nil
+	return fileEntryFromInfo(info.Name(), path, info), nil
 }
 
 func (f *FileService) IsSameDrive(path1, path2 string) bool {
 	return isSameDrive(path1, path2)
+}
+
+func fileEntryFromInfo(name, path string, info os.FileInfo) FileEntry {
+	mode := info.Mode()
+	isSymlink := mode&os.ModeSymlink != 0
+	linkTarget := ""
+	if isSymlink {
+		if target, err := os.Readlink(path); err == nil {
+			linkTarget = target
+		}
+	}
+	return FileEntry{
+		Name:         name,
+		Path:         path,
+		Size:         info.Size(),
+		ModTime:      info.ModTime(),
+		IsDir:        info.IsDir(),
+		IsHidden:     isHiddenEntry(name, path),
+		IsSymlink:    isSymlink,
+		LinkTarget:   linkTarget,
+		IsExecutable: isExecutableEntry(path, mode, info.IsDir()),
+	}
+}
+
+func isExecutableEntry(path string, mode os.FileMode, isDir bool) bool {
+	if isDir {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".exe", ".bat", ".cmd", ".com", ".ps1":
+			return true
+		default:
+			return false
+		}
+	}
+	return mode&0o111 != 0
 }
 
 func (f *FileService) CheckConflicts(paths []string, destDir string) ([]string, error) {

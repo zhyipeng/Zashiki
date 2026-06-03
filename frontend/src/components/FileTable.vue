@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, h } from 'vue'
 import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
 import type { DataTableColumns, DropdownOption } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
@@ -10,6 +10,7 @@ import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
 import { useFileClipboard } from '../composables/useFileClipboard'
 import DropConfirmModal from './DropConfirmModal.vue'
+import { resolveFileIcon } from './fileIcons'
 import { parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
@@ -316,7 +317,16 @@ const baseColumns: DataTableColumns<FileEntry> = [
     title: 'Name',
     key: 'name',
     render(row) {
-      return [row.isDir ? '📁' : '📄', ' ', row.name].join('')
+      const fileIcon = resolveFileIcon(row)
+      return h('div', { class: 'file-name-cell' }, [
+        h(NIcon, {
+          class: 'file-icon',
+          color: fileIcon.color,
+          size: 18,
+          title: fileIcon.label,
+        }, { default: () => h(fileIcon.icon) }),
+        h('span', { class: 'file-name-text' }, row.name),
+      ])
     },
   },
   {
@@ -818,6 +828,35 @@ function friendlyActionError(err: unknown): string {
 
 .error-alert {
   margin: 16px;
+}
+
+:deep(.file-name-cell) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  line-height: 18px;
+}
+
+:deep(.file-icon) {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+:deep(.file-icon svg) {
+  display: block;
+}
+
+:deep(.file-name-text) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modal-body {

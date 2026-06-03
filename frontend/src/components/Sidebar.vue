@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, h, ref, watch } from 'vue'
-import { NTree, NDivider, NText, NSplit } from 'naive-ui'
+import { NTree, NDivider, NText, NSplit, NIcon } from 'naive-ui'
 import type { TreeOption } from 'naive-ui'
+import { FolderOutlined } from '@vicons/material'
 import { FileService } from '../../bindings/zashiki'
 import { useSettings } from '../composables/useSettings'
 import { ancestorPaths, joinPath, pathRoot } from './path'
@@ -144,7 +145,9 @@ const quickAccess = computed(() => {
             :class="{ active: currentPath === item.path }"
             @click="emit('navigate', item.path)"
           >
-            <span class="quick-icon">📁</span>
+            <NIcon class="quick-icon" :size="16" color="#D99A22">
+              <FolderOutlined/>
+            </NIcon>
             <span class="quick-label">{{ item.label }}</span>
           </div>
         </div>
@@ -202,7 +205,13 @@ const quickAccess = computed(() => {
 }
 
 .quick-icon {
-  font-size: 14px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 .quick-label {
