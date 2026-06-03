@@ -60,6 +60,65 @@ func TestFileService_GetFileInfo(t *testing.T) {
 	}
 }
 
+func TestFileService_CreateFolder(t *testing.T) {
+	dir := t.TempDir()
+	s := &FileService{}
+
+	first, err := s.CreateFolder(dir, "New Folder")
+	if err != nil {
+		t.Fatalf("CreateFolder() error = %v", err)
+	}
+	if _, err := os.Stat(first); err != nil {
+		t.Fatalf("created folder should exist: %v", err)
+	}
+
+	second, err := s.CreateFolder(dir, "New Folder")
+	if err != nil {
+		t.Fatalf("CreateFolder() duplicate error = %v", err)
+	}
+	if second == first {
+		t.Fatal("CreateFolder() duplicate should use a unique path")
+	}
+	if _, err := os.Stat(second); err != nil {
+		t.Fatalf("second folder should exist: %v", err)
+	}
+}
+
+func TestFileService_DeleteEntries(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file.txt")
+	subdir := filepath.Join(dir, "subdir")
+	if err := os.WriteFile(file, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	deleted, err := s.DeleteEntries([]string{file, subdir})
+	if err != nil {
+		t.Fatalf("DeleteEntries() error = %v", err)
+	}
+	if len(deleted) != 2 {
+		t.Fatalf("DeleteEntries() deleted %d paths, want 2", len(deleted))
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatalf("deleted file should not exist, stat error = %v", err)
+	}
+	if _, err := os.Stat(subdir); !os.IsNotExist(err) {
+		t.Fatalf("deleted directory should not exist, stat error = %v", err)
+	}
+}
+
+func TestFileService_DeleteEntriesRejectsRoot(t *testing.T) {
+	root := filepath.VolumeName(t.TempDir()) + string(filepath.Separator)
+	s := &FileService{}
+	if _, err := s.DeleteEntries([]string{root}); err == nil {
+		t.Fatal("DeleteEntries() expected error for filesystem root")
+	}
+}
+
 func TestFileService_CopyEntriesRejectsDirectoryToItself(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")

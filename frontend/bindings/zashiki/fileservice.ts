@@ -19,6 +19,16 @@ export function CopyEntries(paths: string[], destDir: string, conflict: string):
     return $Call.ByID(3751035018, paths, destDir, conflict);
 }
 
+export function CreateFolder(parentDir: string, name: string): $CancellablePromise<string> {
+    return $Call.ByID(1509865311, parentDir, name);
+}
+
+export function DeleteEntries(paths: string[]): $CancellablePromise<string[]> {
+    return $Call.ByID(3821512136, paths).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
 export function GetFileInfo(path: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(2925622295, path).then(($result: any) => {
         return $$createType1($result);
@@ -55,6 +65,10 @@ export function MoveEntries(paths: string[], destDir: string, conflict: string):
 
 export function OpenFile(path: string): $CancellablePromise<void> {
     return $Call.ByID(2444982985, path);
+}
+
+export function OpenTerminal(path: string): $CancellablePromise<void> {
+    return $Call.ByID(676363275, path);
 }
 
 // Private type creation functions

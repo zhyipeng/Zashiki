@@ -1,17 +1,25 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput } from 'naive-ui'
-import type { DataTableColumns } from 'naive-ui'
+import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
+import type { DataTableColumns, DropdownOption } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 import type { FileEntry } from '../../bindings/zashiki'
 import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
+import { useFileClipboard } from '../composables/useFileClipboard'
 import DropConfirmModal from './DropConfirmModal.vue'
 import { parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
+const message = useMessage()
+const fileClipboard = useFileClipboard()
+const cutPathSet = computed(() => {
+  const clipboard = fileClipboard.clipboard.value
+  if (!clipboard || clipboard.mode !== 'cut') return new Set<string>()
+  return new Set(clipboard.paths)
+})
 const visibleEntries = computed(() => {
   if (settings.showHiddenFiles) return entries.value
   return entries.value.filter((e: FileEntry) => !e.isHidden)
@@ -78,6 +86,126 @@ const entries = ref<FileEntry[]>([])
 const loading = ref(false)
 const errorMsg = ref('')
 const pathError = ref(false)
+type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
+type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'copy' | 'cut' | 'delete'
+
+interface ContextMenuAction {
+  key: ContextActionKey
+  label: string
+  targets: ContextTarget['kind'][]
+  disabled?: (target: ContextTarget) => boolean
+  run: (target: ContextTarget) => Promise<void> | void
+}
+
+const contextMenu = ref({
+  show: false,
+  x: 0,
+  y: 0,
+  target: null as ContextTarget | null,
+})
+const createFolderModal = ref({
+  show: false,
+  dir: '',
+  name: '新建文件夹',
+})
+const deleteConfirmModal = ref({
+  show: false,
+  entry: null as FileEntry | null,
+})
+
+const contextMenuActions: ContextMenuAction[] = [
+  {
+    key: 'new-folder',
+    label: '新建文件夹',
+    targets: ['blank'],
+    run: (target) => {
+      if (target.kind !== 'blank') return
+      openCreateFolderModal(target.dir)
+    },
+  },
+  {
+    key: 'open-terminal',
+    label: '在终端打开',
+    targets: ['blank'],
+    run: async (target) => {
+      if (target.kind !== 'blank') return
+      await FileService.OpenTerminal(target.dir)
+    },
+  },
+  {
+    key: 'paste',
+    label: '粘贴',
+    targets: ['blank'],
+    disabled: () => !fileClipboard.hasClipboard.value,
+    run: async (target) => {
+      if (target.kind !== 'blank' || !fileClipboard.clipboard.value) return
+      const { paths, mode } = fileClipboard.clipboard.value
+      if (mode === 'cut') {
+        await FileService.MoveEntries(paths, target.dir, 'rename')
+        fileClipboard.clearClipboard()
+      } else {
+        await FileService.CopyEntries(paths, target.dir, 'rename')
+      }
+      refresh()
+    },
+  },
+  {
+    key: 'refresh',
+    label: '刷新',
+    targets: ['blank'],
+    run: () => refresh(),
+  },
+  {
+    key: 'open',
+    label: '打开',
+    targets: ['entry'],
+    run: async (target) => {
+      if (target.kind !== 'entry') return
+      await openEntry(target.entry)
+    },
+  },
+  {
+    key: 'copy',
+    label: '复制',
+    targets: ['entry'],
+    run: (target) => {
+      if (target.kind !== 'entry') return
+      fileClipboard.setClipboard([target.entry.path], 'copy')
+      message.success('已复制到应用剪贴板')
+    },
+  },
+  {
+    key: 'cut',
+    label: '剪切',
+    targets: ['entry'],
+    run: (target) => {
+      if (target.kind !== 'entry') return
+      fileClipboard.setClipboard([target.entry.path], 'cut')
+      message.success('已剪切到应用剪贴板')
+    },
+  },
+  {
+    key: 'delete',
+    label: '删除',
+    targets: ['entry'],
+    run: (target) => {
+      if (target.kind !== 'entry') return
+      openDeleteConfirmModal(target.entry)
+    },
+  },
+]
+
+const contextMenuOptions = computed<DropdownOption[]>(() => {
+  const target = contextMenu.value.target
+  if (!target) return []
+  return contextMenuActions
+    .filter(action => action.targets.includes(target.kind))
+    .map(action => ({
+      label: action.label,
+      key: action.key,
+      disabled: action.disabled?.(target) || false,
+    }))
+})
 
 function friendlyError(err: unknown, p: string): string {
   const msg = String(err).toLowerCase()
@@ -199,6 +327,10 @@ const columns: DataTableColumns<FileEntry> = [
 ]
 
 async function onRowDblclick(row: FileEntry) {
+  await openEntry(row)
+}
+
+async function openEntry(row: FileEntry) {
   if (row.isDir) {
     emit('navigate', row.path)
   } else {
@@ -209,6 +341,115 @@ async function onRowDblclick(row: FileEntry) {
       errorMsg.value = friendlyError(err, row.path)
     }
   }
+}
+
+function showContextMenu(e: MouseEvent, target: ContextTarget) {
+  e.preventDefault()
+  contextMenu.value = {
+    show: false,
+    x: e.clientX,
+    y: e.clientY,
+    target,
+  }
+  requestAnimationFrame(() => {
+    contextMenu.value.show = true
+  })
+}
+
+function onTableContextMenu(e: MouseEvent) {
+  showContextMenu(e, { kind: 'blank', dir: props.path })
+}
+
+function onRowContextMenu(e: MouseEvent, row: FileEntry) {
+  e.stopPropagation()
+  showContextMenu(e, { kind: 'entry', entry: row })
+}
+
+function hideContextMenu() {
+  contextMenu.value.show = false
+}
+
+function openCreateFolderModal(dir: string) {
+  createFolderModal.value = {
+    show: true,
+    dir,
+    name: '新建文件夹',
+  }
+}
+
+function closeCreateFolderModal() {
+  createFolderModal.value.show = false
+}
+
+async function confirmCreateFolder() {
+  const { dir, name } = createFolderModal.value
+  if (!dir) return
+  try {
+    await FileService.CreateFolder(dir, name.trim() || '新建文件夹')
+    closeCreateFolderModal()
+    refresh()
+  } catch (err) {
+    console.error('Create folder failed:', err)
+    message.error(friendlyActionError(err))
+  }
+}
+
+function openDeleteConfirmModal(entry: FileEntry) {
+  deleteConfirmModal.value = {
+    show: true,
+    entry,
+  }
+}
+
+function closeDeleteConfirmModal() {
+  deleteConfirmModal.value.show = false
+}
+
+async function confirmDeleteEntry() {
+  const entry = deleteConfirmModal.value.entry
+  if (!entry) return
+  try {
+    const deletedPaths = await FileService.DeleteEntries([entry.path])
+    closeDeleteConfirmModal()
+    removeEntries(deletedPaths)
+  } catch (err) {
+    console.error('Delete entry failed:', err)
+    message.error(friendlyActionError(err))
+  }
+}
+
+function removeEntries(paths: string[]) {
+  const deleted = new Set(paths)
+  entries.value = entries.value.filter(entry => !deleted.has(entry.path))
+}
+
+async function onContextMenuSelect(key: string | number) {
+  const target = contextMenu.value.target
+  hideContextMenu()
+  if (!target) return
+  const action = contextMenuActions.find(item => item.key === key)
+  if (!action || action.disabled?.(target)) return
+  try {
+    await action.run(target)
+  } catch (err) {
+    console.error('Context menu action failed:', key, err)
+    message.error(friendlyActionError(err))
+  }
+}
+
+function friendlyActionError(err: unknown): string {
+  const text = err instanceof Error ? err.message : String(err)
+  const lower = text.toLowerCase()
+  if (lower.includes('permission denied') || lower.includes('access denied') || lower.includes('operation not permitted')) {
+    return '权限不足，操作失败'
+  }
+  if (lower.includes('no such file') || lower.includes('not found') || lower.includes('does not exist')) {
+    return '源文件或目标目录不存在'
+  }
+  if (lower.includes('into itself') || lower.includes('subdirectory')) {
+    return '不能复制或移动到自身或子目录'
+  }
+  return `操作失败：${text}`
 }
 </script>
 
@@ -309,6 +550,7 @@ async function onRowDblclick(row: FileEntry) {
       @dragenter="onDragEnter"
       @dragleave="onDragLeave"
       @drop="onDrop"
+      @contextmenu="onTableContextMenu"
     >
       <div v-if="isDragOver" class="drag-overlay">
         <span class="drag-label">{{ dragLabel }}</span>
@@ -322,12 +564,16 @@ async function onRowDblclick(row: FileEntry) {
         :row-key="(row: FileEntry) => row.path"
         :row-props="(row: FileEntry) => ({
           style: 'cursor: pointer',
-          class: hoveredFolderPath === row.path ? 'drag-target-folder' : '',
+          class: [
+            hoveredFolderPath === row.path ? 'drag-target-folder' : '',
+            cutPathSet.has(row.path) ? 'cut-entry' : '',
+          ].filter(Boolean).join(' '),
           'data-folder-path': row.isDir ? row.path : undefined,
           draggable: true,
           onDragstart: (e: DragEvent) => onRowDragStart(e, row),
           onDragend: () => clearDrag(),
           onDblclick: () => onRowDblclick(row),
+          onContextmenu: (e: MouseEvent) => onRowContextMenu(e, row),
         })"
         :bordered="false"
         :single-line="false"
@@ -337,6 +583,16 @@ async function onRowDblclick(row: FileEntry) {
         class="data-table"
       />
       <NEmpty v-else description="Empty directory" class="empty-fill" />
+      <NDropdown
+        trigger="manual"
+        placement="bottom-start"
+        :show="contextMenu.show"
+        :x="contextMenu.x"
+        :y="contextMenu.y"
+        :options="contextMenuOptions"
+        @select="onContextMenuSelect"
+        @clickoutside="hideContextMenu"
+      />
     </div>
     <DropConfirmModal
       :show="showConfirm"
@@ -345,6 +601,43 @@ async function onRowDblclick(row: FileEntry) {
       @confirm="onConfirm"
       @update:show="(v: boolean) => !v && onCancel()"
     />
+    <NModal
+      v-model:show="createFolderModal.show"
+      preset="card"
+      title="新建文件夹"
+      style="width: 360px"
+    >
+      <div class="modal-body">
+        <NInput
+          v-model:value="createFolderModal.name"
+          placeholder="文件夹名"
+          autofocus
+          @keyup.enter="confirmCreateFolder"
+        />
+      </div>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="closeCreateFolderModal">取消</NButton>
+          <NButton type="primary" @click="confirmCreateFolder">创建</NButton>
+        </NSpace>
+      </template>
+    </NModal>
+    <NModal
+      v-model:show="deleteConfirmModal.show"
+      preset="card"
+      title="确认删除"
+      style="width: 360px"
+    >
+      <div class="modal-body">
+        确定删除「{{ deleteConfirmModal.entry?.name }}」吗？
+      </div>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="closeDeleteConfirmModal">取消</NButton>
+          <NButton type="error" @click="confirmDeleteEntry">删除</NButton>
+        </NSpace>
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -418,6 +711,10 @@ async function onRowDblclick(row: FileEntry) {
   margin: 16px;
 }
 
+.modal-body {
+  font-size: 13px;
+}
+
 .drag-overlay {
   position: absolute;
   inset: 0;
@@ -442,5 +739,9 @@ async function onRowDblclick(row: FileEntry) {
   outline: 2px solid var(--n-primary-color, #18a058);
   outline-offset: -2px;
   background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.1) !important;
+}
+
+:deep(tr.cut-entry td) {
+  opacity: 0.45;
 }
 </style>

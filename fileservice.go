@@ -76,6 +76,24 @@ func (f *FileService) OpenFile(path string) error {
 	}
 }
 
+func (f *FileService) OpenTerminal(path string) error {
+	dir, err := terminalDir(path)
+	if err != nil {
+		return err
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", "-a", "Terminal", dir).Start()
+	case "linux":
+		return startLinuxTerminal(dir)
+	case "windows":
+		return exec.Command("cmd", "/C", "start", "", "cmd", "/K", "cd", "/d", dir).Start()
+	default:
+		return exec.Command("open", dir).Start()
+	}
+}
+
 func (f *FileService) GetHomeDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -127,6 +145,48 @@ func (f *FileService) CheckConflicts(paths []string, destDir string) ([]string, 
 		}
 	}
 	return conflicts, nil
+}
+
+func (f *FileService) CreateFolder(parentDir string, name string) (string, error) {
+	parentInfo, err := os.Stat(parentDir)
+	if err != nil {
+		return "", err
+	}
+	if !parentInfo.IsDir() {
+		return "", fmt.Errorf("parent path %q is not a directory", parentDir)
+	}
+	if name == "" {
+		name = "New Folder"
+	}
+	if filepath.Base(name) != name || name == "." || name == ".." {
+		return "", fmt.Errorf("invalid folder name %q", name)
+	}
+
+	path := filepath.Join(parentDir, name)
+	if _, err := os.Stat(path); err == nil {
+		path = uniquePath(path)
+	}
+	if path == "" {
+		return "", fmt.Errorf("failed to create unique folder name in %q", parentDir)
+	}
+	if err := os.Mkdir(path, 0o755); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func (f *FileService) DeleteEntries(paths []string) ([]string, error) {
+	deleted := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if err := validateDeletePath(path); err != nil {
+			return deleted, err
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return deleted, err
+		}
+		deleted = append(deleted, path)
+	}
+	return deleted, nil
 }
 
 func (f *FileService) CopyEntries(paths []string, destDir string, conflict string) error {
@@ -243,6 +303,58 @@ func sameOrChildPath(path, parent string) (bool, bool) {
 		return true, false
 	}
 	return false, rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func validateDeletePath(path string) error {
+	if path == "" {
+		return fmt.Errorf("cannot delete empty path")
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	clean := filepath.Clean(abs)
+	if filepath.Dir(clean) == clean {
+		return fmt.Errorf("cannot delete filesystem root %q", path)
+	}
+	return nil
+}
+
+func terminalDir(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() {
+		return path, nil
+	}
+	return filepath.Dir(path), nil
+}
+
+func startLinuxTerminal(dir string) error {
+	commands := [][]string{
+		{"x-terminal-emulator", "--working-directory", dir},
+		{"gnome-terminal", "--working-directory", dir},
+		{"konsole", "--workdir", dir},
+		{"xfce4-terminal", "--working-directory", dir},
+		{"xterm", "-e", "sh", "-c", "cd \"$1\" && exec sh", "sh", dir},
+	}
+	var lastErr error
+	for _, command := range commands {
+		if _, err := exec.LookPath(command[0]); err != nil {
+			lastErr = err
+			continue
+		}
+		if err := exec.Command(command[0], command[1:]...).Start(); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("no terminal application found")
 }
 
 func uniquePath(path string) string {
