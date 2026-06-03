@@ -48,6 +48,7 @@ function renderTreeLabel({ option }: { option: TreeOption }) {
   const key = typeof option.key === 'string' ? option.key : String(option.key)
   const root = rootByPath.value.get(key)
   if (!root || !root.totalSpace) return option.label as string
+  const usage = formatRootUsage(root)
 
   const usedPercent = Math.min(
     100,
@@ -58,7 +59,18 @@ function renderTreeLabel({ option }: { option: TreeOption }) {
     style: { '--used-percent': `${usedPercent}%` },
   }, [
     h('span', { class: 'root-title' }, root.name || root.path),
+    h('span', { class: 'root-space' }, usage),
   ])
+}
+
+function formatRootUsage(root: RootInfo): string {
+  const totalG = Math.max(1, bytesToG(root.totalSpace))
+  const usedG = Math.min(totalG, Math.max(0, bytesToG(root.totalSpace - root.freeSpace)))
+  return `${usedG}/${totalG}G`
+}
+
+function bytesToG(bytes: number): number {
+  return Math.round(bytes / 1024 ** 3)
 }
 
 // 当通过外部方式（Quick Access、FileTable）导航时，展开祖先路径
@@ -214,6 +226,10 @@ const quickAccess = computed(() => {
 :deep(.root-label) {
   width: 100%;
   min-width: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   padding: 2px 6px;
   margin: 1px 0;
   border-radius: 4px;
@@ -230,9 +246,19 @@ const quickAccess = computed(() => {
 
 :deep(.root-title) {
   display: block;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 18px;
+}
+
+:deep(.root-space) {
+  flex-shrink: 0;
+  color: var(--n-text-color-3);
+  font-size: 8px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 </style>
