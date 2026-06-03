@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useMessage } from 'naive-ui'
 import type { FileEntry } from '../../bindings/zashiki'
 import { FileService } from '../../bindings/zashiki'
@@ -40,6 +40,10 @@ export function useDragDrop(currentPath: () => string, onChanged: () => void) {
   refreshCallbacks.add(onChanged)
   const isDragOver = ref(false)
   dragOverRefs.add(isDragOver)
+  onUnmounted(() => {
+    refreshCallbacks.delete(onChanged)
+    dragOverRefs.delete(isDragOver)
+  })
 
   // ---- drag source ----
 
