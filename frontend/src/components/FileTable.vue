@@ -4,8 +4,8 @@ import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput } from
 import type { DataTableColumns } from 'naive-ui'
 import { FileService } from '../../bindings/zashiki'
 import type { FileEntry } from '../../bindings/zashiki'
-import { CloseSharp, ArrowBackRound, ArrowForwardRound, HomeRound } from '@vicons/material'
-import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular } from '@vicons/fluent'
+import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp } from '@vicons/material'
+import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
 import DropConfirmModal from './DropConfirmModal.vue'
@@ -236,21 +236,30 @@ async function onRowDblclick(row: FileEntry) {
         </NButton>
         <NButton
           text
-          :disabled="!canGoHome"
-          title="主页"
-          @click="goHome"
-        >
-          <template #icon>
-            <n-icon><HomeRound/></n-icon>
-          </template>
-        </NButton>
-        <NButton
-          text
           :disabled="!canGoUp"
           @click="goUp"
         >
           <template #icon>
             <n-icon><FolderArrowUp24Regular/></n-icon>
+          </template>
+        </NButton>
+        <NButton
+            text
+            :disabled="!canGoHome"
+            title="主页"
+            @click="goHome"
+        >
+          <template #icon>
+            <n-icon><Home28Regular/></n-icon>
+          </template>
+        </NButton>
+        <NButton
+            text
+            title="刷新"
+            @click="refresh"
+        >
+          <template #icon>
+            <n-icon><RefreshSharp/></n-icon>
           </template>
         </NButton>
         <NInput
