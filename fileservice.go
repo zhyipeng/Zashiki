@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -117,6 +118,9 @@ func (f *FileService) IsSameDrive(path1, path2 string) bool {
 func (f *FileService) CheckConflicts(paths []string, destDir string) ([]string, error) {
 	var conflicts []string
 	for _, src := range paths {
+		if err := validateEntryDestination(src, destDir, ""); err != nil {
+			return nil, err
+		}
 		dst := filepath.Join(destDir, filepath.Base(src))
 		if _, err := os.Stat(dst); err == nil {
 			conflicts = append(conflicts, filepath.Base(src))
@@ -128,7 +132,10 @@ func (f *FileService) CheckConflicts(paths []string, destDir string) ([]string, 
 func (f *FileService) CopyEntries(paths []string, destDir string, conflict string) error {
 	log.Printf("CopyEntries to %s, conflict=%s, files: %+v", destDir, conflict, paths)
 	for _, src := range paths {
-		dst := resolveDst(src, destDir, conflict)
+		dst, err := resolveDst(src, destDir, conflict)
+		if err != nil {
+			return err
+		}
 		if dst == "" {
 			continue // skip
 		}
@@ -142,7 +149,10 @@ func (f *FileService) CopyEntries(paths []string, destDir string, conflict strin
 func (f *FileService) MoveEntries(paths []string, destDir string, conflict string) error {
 	log.Printf("MoveEntries to %s, conflict=%s, files: %+v", destDir, conflict, paths)
 	for _, src := range paths {
-		dst := resolveDst(src, destDir, conflict)
+		dst, err := resolveDst(src, destDir, conflict)
+		if err != nil {
+			return err
+		}
 		if dst == "" {
 			continue
 		}
@@ -150,25 +160,89 @@ func (f *FileService) MoveEntries(paths []string, destDir string, conflict strin
 			if err := copyEntry(src, dst); err != nil {
 				return err
 			}
-			os.RemoveAll(src)
+			if err := os.RemoveAll(src); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func resolveDst(src, destDir, conflict string) string {
+func resolveDst(src, destDir, conflict string) (string, error) {
+	if err := validateEntryDestination(src, destDir, ""); err != nil {
+		return "", err
+	}
+
 	dst := filepath.Join(destDir, filepath.Base(src))
 	if _, err := os.Stat(dst); os.IsNotExist(err) {
-		return dst
+		if err := validateEntryDestination(src, destDir, dst); err != nil {
+			return "", err
+		}
+		return dst, nil
 	}
 	switch conflict {
 	case "skip":
-		return ""
+		return "", nil
 	case "rename":
-		return uniquePath(dst)
+		dst = uniquePath(dst)
 	default: // overwrite
-		return dst
 	}
+	if dst == "" {
+		return "", nil
+	}
+	if err := validateEntryDestination(src, destDir, dst); err != nil {
+		return "", err
+	}
+	return dst, nil
+}
+
+func validateEntryDestination(src, destDir, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if err := validateSourceDestination(src, destDir, srcInfo); err != nil {
+		return err
+	}
+	if dst == "" {
+		return nil
+	}
+	return validateSourceDestination(src, dst, srcInfo)
+}
+
+func validateSourceDestination(src, dest string, srcInfo os.FileInfo) error {
+	srcAbs, err := filepath.Abs(src)
+	if err != nil {
+		return err
+	}
+	destAbs, err := filepath.Abs(dest)
+	if err != nil {
+		return err
+	}
+
+	same, child := sameOrChildPath(destAbs, srcAbs)
+	if same || (srcInfo.IsDir() && child) {
+		return fmt.Errorf("cannot copy or move %q into itself or its subdirectory", src)
+	}
+	return nil
+}
+
+func sameOrChildPath(path, parent string) (bool, bool) {
+	path = filepath.Clean(path)
+	parent = filepath.Clean(parent)
+	if runtime.GOOS == "windows" {
+		path = strings.ToLower(path)
+		parent = strings.ToLower(parent)
+	}
+
+	rel, err := filepath.Rel(parent, path)
+	if err != nil {
+		return false, false
+	}
+	if rel == "." {
+		return true, false
+	}
+	return false, rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func uniquePath(path string) string {

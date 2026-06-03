@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { useMessage } from 'naive-ui'
 import type { FileEntry } from '../../bindings/zashiki'
 import { FileService } from '../../bindings/zashiki'
 
@@ -35,6 +36,7 @@ export function clearDrag() {
 }
 
 export function useDragDrop(currentPath: () => string, onChanged: () => void) {
+  const message = useMessage()
   refreshCallbacks.add(onChanged)
   const isDragOver = ref(false)
   dragOverRefs.add(isDragOver)
@@ -118,13 +120,18 @@ export function useDragDrop(currentPath: () => string, onChanged: () => void) {
     pendingDrop.value = null
     dragPayload.value = null
 
-    if (action === 'move') {
-      await FileService.MoveEntries(drop.paths, drop.targetDir, conflict)
-    } else {
-      await FileService.CopyEntries(drop.paths, drop.targetDir, conflict)
-    }
-    for (const cb of refreshCallbacks) {
-      cb()
+    try {
+      if (action === 'move') {
+        await FileService.MoveEntries(drop.paths, drop.targetDir, conflict)
+      } else {
+        await FileService.CopyEntries(drop.paths, drop.targetDir, conflict)
+      }
+      for (const cb of refreshCallbacks) {
+        cb()
+      }
+    } catch (err) {
+      console.error('Drop operation failed:', err)
+      message.error(friendlyDropError(err))
     }
   }
 
@@ -152,6 +159,27 @@ export function useDragDrop(currentPath: () => string, onChanged: () => void) {
       }
     }
     return paths
+  }
+
+  function friendlyDropError(err: unknown): string {
+    const text = errorText(err)
+    const lower = text.toLowerCase()
+    if (lower.includes('into itself') || lower.includes('subdirectory')) {
+      return '不能复制或移动到自身或子目录'
+    }
+    if (lower.includes('permission denied') || lower.includes('access denied') || lower.includes('operation not permitted')) {
+      return '权限不足，操作失败'
+    }
+    if (lower.includes('no such file') || lower.includes('not found') || lower.includes('does not exist')) {
+      return '源文件或目标目录不存在'
+    }
+    return `操作失败：${text}`
+  }
+
+  function errorText(err: unknown): string {
+    if (err instanceof Error) return err.message
+    if (typeof err === 'string') return err
+    return String(err)
   }
 
   return {

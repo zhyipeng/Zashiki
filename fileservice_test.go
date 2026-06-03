@@ -59,3 +59,97 @@ func TestFileService_GetFileInfo(t *testing.T) {
 		t.Error("IsDir should be false")
 	}
 }
+
+func TestFileService_CopyEntriesRejectsDirectoryToItself(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	err := s.CopyEntries([]string{src}, dir, "overwrite")
+	if err == nil {
+		t.Fatal("CopyEntries() expected error when copying directory to itself")
+	}
+}
+
+func TestFileService_CopyEntriesAllowsRenameConflictInSameParent(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	err := s.CopyEntries([]string{src}, dir, "rename")
+	if err != nil {
+		t.Fatalf("CopyEntries() error = %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "src (1)", "file.txt")); statErr != nil {
+		t.Fatalf("renamed copy should exist, stat error = %v", statErr)
+	}
+}
+
+func TestFileService_CheckConflictsRejectsDirectoryAsDestination(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	_, err := s.CheckConflicts([]string{src}, src)
+	if err == nil {
+		t.Fatal("CheckConflicts() expected error when destination is source")
+	}
+}
+
+func TestFileService_CopyEntriesRejectsDirectoryToChild(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	destDir := filepath.Join(src, "child")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	err := s.CopyEntries([]string{src}, destDir, "overwrite")
+	if err == nil {
+		t.Fatal("CopyEntries() expected error when copying directory to child")
+	}
+	if _, statErr := os.Stat(destDir); !os.IsNotExist(statErr) {
+		t.Fatalf("destination child should not be created, stat error = %v", statErr)
+	}
+}
+
+func TestFileService_MoveEntriesRejectsDirectoryToChildWithoutDeletingSource(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	destDir := filepath.Join(src, "child")
+	file := filepath.Join(src, "file.txt")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	err := s.MoveEntries([]string{src}, destDir, "overwrite")
+	if err == nil {
+		t.Fatal("MoveEntries() expected error when moving directory to child")
+	}
+	if _, statErr := os.Stat(file); statErr != nil {
+		t.Fatalf("source file should remain after rejected move, stat error = %v", statErr)
+	}
+	if _, statErr := os.Stat(destDir); !os.IsNotExist(statErr) {
+		t.Fatalf("destination child should not be created, stat error = %v", statErr)
+	}
+}
