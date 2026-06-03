@@ -2,16 +2,32 @@
 
 package main
 
-import "syscall"
+import (
+	"os"
+	"syscall"
+)
 
 func getRoots() []RootEntry {
 	freeSpace, totalSpace := rootSpace("/")
-	return []RootEntry{{
+	roots := []RootEntry{{
 		Name:       "/",
 		Path:       "/",
 		FreeSpace:  freeSpace,
 		TotalSpace: totalSpace,
 	}}
+
+	home, err := os.UserHomeDir()
+	if err == nil && home != "" && home != "/" {
+		freeSpace, totalSpace = rootSpace(home)
+		roots = append(roots, RootEntry{
+			Name:       "Home",
+			Path:       home,
+			FreeSpace:  freeSpace,
+			TotalSpace: totalSpace,
+		})
+	}
+
+	return roots
 }
 
 func rootSpace(path string) (uint64, uint64) {

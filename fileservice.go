@@ -78,7 +78,11 @@ func (f *FileService) OpenFile(path string) error {
 func (f *FileService) GetHomeDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "/"
+		roots := getRoots()
+		if len(roots) > 0 {
+			return roots[0].Path
+		}
+		return string(filepath.Separator)
 	}
 	return home
 }
