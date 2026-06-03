@@ -2,6 +2,7 @@
 import { ref, watch, computed, h } from 'vue'
 import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
 import type { DataTableColumns, DropdownOption } from 'naive-ui'
+import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki'
 import type { FileEntry } from '../../bindings/zashiki'
 import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined } from '@vicons/material'
@@ -91,7 +92,7 @@ const multiSelectMode = ref(false)
 const selectedRowKeys = ref<string[]>([])
 const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
-type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'copy' | 'cut' | 'delete'
+type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'copy-path' | 'copy' | 'cut' | 'delete'
 
 interface ContextMenuAction {
   key: ContextActionKey
@@ -171,6 +172,16 @@ const contextMenuActions: ContextMenuAction[] = [
     run: async (target) => {
       if (target.kind !== 'entry') return
       await openEntries(operationEntriesForEntry(target.entry))
+    },
+  },
+  {
+    key: 'copy-path',
+    label: '复制路径',
+    targets: ['blank', 'entry'],
+    run: async (target) => {
+      const paths = pathsForCopyPath(target)
+      await Clipboard.SetText(paths.join('\n'))
+      message.success(paths.length > 1 ? `已复制 ${paths.length} 个路径` : '已复制路径')
     },
   },
   {
@@ -436,6 +447,13 @@ function operationEntriesForEntry(entry: FileEntry): FileEntry[] {
 
 function dragPathsForRow(row: FileEntry): string[] {
   return operationEntriesForEntry(row).map(entry => entry.path)
+}
+
+function pathsForCopyPath(target: ContextTarget): string[] {
+  if (target.kind === 'blank') {
+    return [target.dir]
+  }
+  return operationEntriesForEntry(target.entry).map(entry => entry.path)
 }
 
 function showContextMenu(e: MouseEvent, target: ContextTarget) {
