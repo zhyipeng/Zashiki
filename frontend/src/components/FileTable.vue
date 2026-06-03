@@ -106,6 +106,11 @@ const contextMenu = ref({
   y: 0,
   target: null as ContextTarget | null,
 })
+const contextActivePath = computed(() => {
+  const target = contextMenu.value.target
+  if (!contextMenu.value.show || multiSelectMode.value || target?.kind !== 'entry') return ''
+  return target.entry.path
+})
 const createFolderModal = ref({
   show: false,
   dir: '',
@@ -662,6 +667,7 @@ function friendlyActionError(err: unknown): string {
           style: 'cursor: pointer',
           class: [
             hoveredFolderPath === row.path ? 'drag-target-folder' : '',
+            contextActivePath === row.path ? 'context-active-entry' : '',
             selectedPathSet.has(row.path) ? 'selected-entry' : '',
             cutPathSet.has(row.path) ? 'cut-entry' : '',
           ].filter(Boolean).join(' '),
@@ -850,6 +856,10 @@ function friendlyActionError(err: unknown): string {
 
 :deep(tr.selected-entry:hover td) {
   background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.18) !important;
+}
+
+:deep(tr.context-active-entry td) {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.14) !important;
 }
 
 :deep(tr.cut-entry td) {
