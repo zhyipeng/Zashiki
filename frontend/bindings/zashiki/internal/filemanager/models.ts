@@ -9,6 +9,64 @@ import { Create as $Create } from "@wailsio/runtime";
 // @ts-ignore: Unused imports
 import * as time$0 from "../../../time/models.js";
 
+export class EntryOperationResult {
+    "sourcePath": string;
+    "targetPath": string;
+    "skipped": boolean;
+    "overwritten": boolean;
+
+    /** Creates a new EntryOperationResult instance. */
+    constructor($$source: Partial<EntryOperationResult> = {}) {
+        if (!("sourcePath" in $$source)) {
+            this["sourcePath"] = "";
+        }
+        if (!("targetPath" in $$source)) {
+            this["targetPath"] = "";
+        }
+        if (!("skipped" in $$source)) {
+            this["skipped"] = false;
+        }
+        if (!("overwritten" in $$source)) {
+            this["overwritten"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new EntryOperationResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): EntryOperationResult {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new EntryOperationResult($$parsedSource as Partial<EntryOperationResult>);
+    }
+}
+
+export class EntryPathPair {
+    "sourcePath": string;
+    "targetPath": string;
+
+    /** Creates a new EntryPathPair instance. */
+    constructor($$source: Partial<EntryPathPair> = {}) {
+        if (!("sourcePath" in $$source)) {
+            this["sourcePath"] = "";
+        }
+        if (!("targetPath" in $$source)) {
+            this["targetPath"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new EntryPathPair instance from a string or object.
+     */
+    static createFrom($$source: any = {}): EntryPathPair {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new EntryPathPair($$parsedSource as Partial<EntryPathPair>);
+    }
+}
+
 export class FileEntry {
     "name": string;
     "path": string;

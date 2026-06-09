@@ -84,6 +84,26 @@ func TestFileService_CreateFolder(t *testing.T) {
 	}
 }
 
+func TestFileService_CreateFolderAt(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "exact")
+	s := &FileService{}
+
+	created, err := s.CreateFolderAt(target)
+	if err != nil {
+		t.Fatalf("CreateFolderAt() error = %v", err)
+	}
+	if created != target {
+		t.Fatalf("CreateFolderAt() = %q, want %q", created, target)
+	}
+	if info, err := os.Stat(target); err != nil || !info.IsDir() {
+		t.Fatalf("created folder stat = %v, err = %v", info, err)
+	}
+	if _, err := s.CreateFolderAt(target); err == nil {
+		t.Fatal("CreateFolderAt() expected error for existing target")
+	}
+}
+
 func TestFileService_RenameEntry(t *testing.T) {
 	dir := t.TempDir()
 	oldPath := filepath.Join(dir, "old.txt")
@@ -164,6 +184,22 @@ func TestFileService_DeleteEntries(t *testing.T) {
 	}
 }
 
+func TestFileService_DeleteEmptyFolderRejectsNonEmpty(t *testing.T) {
+	dir := t.TempDir()
+	child := filepath.Join(dir, "file.txt")
+	if err := os.WriteFile(child, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	if _, err := s.DeleteEmptyFolder(dir); err == nil {
+		t.Fatal("DeleteEmptyFolder() expected error for non-empty directory")
+	}
+	if _, err := os.Stat(child); err != nil {
+		t.Fatalf("child should remain after rejected delete, stat error = %v", err)
+	}
+}
+
 func TestFileService_DeleteEntriesRejectsRoot(t *testing.T) {
 	root := filepath.VolumeName(t.TempDir()) + string(filepath.Separator)
 	s := &FileService{}
@@ -180,7 +216,7 @@ func TestFileService_CopyEntriesRejectsDirectoryToItself(t *testing.T) {
 	}
 
 	s := &FileService{}
-	err := s.CopyEntries([]string{src}, dir, "overwrite")
+	_, err := s.CopyEntries([]string{src}, dir, "overwrite")
 	if err == nil {
 		t.Fatal("CopyEntries() expected error when copying directory to itself")
 	}
@@ -197,12 +233,80 @@ func TestFileService_CopyEntriesAllowsRenameConflictInSameParent(t *testing.T) {
 	}
 
 	s := &FileService{}
-	err := s.CopyEntries([]string{src}, dir, "rename")
+	results, err := s.CopyEntries([]string{src}, dir, "rename")
 	if err != nil {
 		t.Fatalf("CopyEntries() error = %v", err)
 	}
+	if len(results) != 1 {
+		t.Fatalf("CopyEntries() returned %d results, want 1", len(results))
+	}
+	if results[0].SourcePath != src || results[0].TargetPath != filepath.Join(dir, "src (1)") || results[0].Skipped || results[0].Overwritten {
+		t.Fatalf("CopyEntries() result = %+v, want renamed copy result", results[0])
+	}
 	if _, statErr := os.Stat(filepath.Join(dir, "src (1)", "file.txt")); statErr != nil {
 		t.Fatalf("renamed copy should exist, stat error = %v", statErr)
+	}
+}
+
+func TestFileService_CopyEntriesToTargets(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	target := filepath.Join(dir, "nested", "target.txt")
+	if err := os.WriteFile(src, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	results, err := s.CopyEntriesToTargets([]EntryPathPair{{SourcePath: src, TargetPath: target}})
+	if err != nil {
+		t.Fatalf("CopyEntriesToTargets() error = %v", err)
+	}
+	if len(results) != 1 || results[0].SourcePath != src || results[0].TargetPath != target {
+		t.Fatalf("CopyEntriesToTargets() result = %+v, want exact target result", results)
+	}
+	if content, err := os.ReadFile(target); err != nil || string(content) != "content" {
+		t.Fatalf("target content = %q, err = %v", string(content), err)
+	}
+}
+
+func TestFileService_CopyEntriesToTargetsRejectsExistingTarget(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(src, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("existing"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	if _, err := s.CopyEntriesToTargets([]EntryPathPair{{SourcePath: src, TargetPath: target}}); err == nil {
+		t.Fatal("CopyEntriesToTargets() expected error for existing target")
+	}
+}
+
+func TestFileService_MoveEntriesToTargets(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	target := filepath.Join(dir, "nested", "target.txt")
+	if err := os.WriteFile(src, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	results, err := s.MoveEntriesToTargets([]EntryPathPair{{SourcePath: src, TargetPath: target}})
+	if err != nil {
+		t.Fatalf("MoveEntriesToTargets() error = %v", err)
+	}
+	if len(results) != 1 || results[0].SourcePath != src || results[0].TargetPath != target {
+		t.Fatalf("MoveEntriesToTargets() result = %+v, want exact target result", results)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Fatalf("source should not exist after move, stat error = %v", err)
+	}
+	if content, err := os.ReadFile(target); err != nil || string(content) != "content" {
+		t.Fatalf("target content = %q, err = %v", string(content), err)
 	}
 }
 
@@ -232,7 +336,7 @@ func TestFileService_CopyEntriesRejectsDirectoryToChild(t *testing.T) {
 	}
 
 	s := &FileService{}
-	err := s.CopyEntries([]string{src}, destDir, "overwrite")
+	_, err := s.CopyEntries([]string{src}, destDir, "overwrite")
 	if err == nil {
 		t.Fatal("CopyEntries() expected error when copying directory to child")
 	}
@@ -254,7 +358,7 @@ func TestFileService_MoveEntriesRejectsDirectoryToChildWithoutDeletingSource(t *
 	}
 
 	s := &FileService{}
-	err := s.MoveEntries([]string{src}, destDir, "overwrite")
+	_, err := s.MoveEntries([]string{src}, destDir, "overwrite")
 	if err == nil {
 		t.Fatal("MoveEntries() expected error when moving directory to child")
 	}

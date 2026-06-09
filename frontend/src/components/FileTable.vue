@@ -10,7 +10,7 @@ import type { AutoCompleteInst, AutoCompleteOption, DataTableColumns, DataTableI
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
-import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined, SearchOutlined } from '@vicons/material'
+import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined, SearchOutlined, UndoSharp, RedoSharp } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
@@ -18,6 +18,7 @@ import { useFileClipboard } from '../composables/useFileClipboard'
 import { formatShortcutBinding, useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
 import { notifyDirectoriesChanged, useDirectoryEvents } from '../composables/useDirectoryEvents'
+import { useFileOperationHistory } from '../composables/useFileOperationHistory'
 import DropConfirmModal from './DropConfirmModal.vue'
 import { fileTypeLabel, resolveFileIcon } from './fileIcons'
 import { joinPath, parentPath as getParentPath } from './path'
@@ -52,6 +53,7 @@ const props = defineProps<{
   homeDir: string
   trashLabel?: string
 }>()
+const operationHistory = useFileOperationHistory(() => props.separator)
 
 function loadDir(p: string) {
   loading.value = true
@@ -85,7 +87,15 @@ const {
   pendingDrop, confirmDrop, cancelDrop,
   onRowDragStart,
   onDragOver, onDragEnter, onDragLeave, onDrop,
-} = useDragDrop(() => props.path)
+} = useDragDrop(() => props.path, {
+  onOperationComplete: (action, results) => {
+    if (action === 'move') {
+      operationHistory.recordMove(results)
+    } else {
+      operationHistory.recordCopy(results)
+    }
+  },
+})
 
 const showConfirm = ref(false)
 watch(pendingDrop, (val) => { showConfirm.value = !!val })
@@ -186,14 +196,7 @@ const contextMenuActions: ContextMenuAction[] = [
     disabled: () => !fileClipboard.hasClipboard.value,
     run: async (target) => {
       if (target.kind !== 'blank' || !fileClipboard.clipboard.value) return
-      const { paths, mode } = fileClipboard.clipboard.value
-      if (mode === 'cut') {
-        await FileService.MoveEntries(paths, target.dir, 'rename')
-        fileClipboard.clearClipboard()
-      } else {
-        await FileService.CopyEntries(paths, target.dir, 'rename')
-      }
-      notifyDirectoriesChanged([target.dir, ...sourceDirsForPaths(paths)])
+      await pasteClipboardEntriesToDir(target.dir)
     },
   },
   {
@@ -845,16 +848,22 @@ function cutCurrentEntries() {
 }
 
 async function pasteClipboardEntries() {
+  await pasteClipboardEntriesToDir(props.path)
+}
+
+async function pasteClipboardEntriesToDir(targetDir: string) {
   const clipboard = fileClipboard.clipboard.value
   if (!clipboard) return
   const { paths, mode } = clipboard
   if (mode === 'cut') {
-    await FileService.MoveEntries(paths, props.path, 'rename')
+    const results = await FileService.MoveEntries(paths, targetDir, 'rename')
+    operationHistory.recordMove(results)
     fileClipboard.clearClipboard()
   } else {
-    await FileService.CopyEntries(paths, props.path, 'rename')
+    const results = await FileService.CopyEntries(paths, targetDir, 'rename')
+    operationHistory.recordCopy(results)
   }
-  notifyDirectoriesChanged([props.path, ...sourceDirsForPaths(paths)])
+  notifyDirectoriesChanged([targetDir, ...sourceDirsForPaths(paths)])
 }
 
 function deleteCurrentEntries() {
@@ -971,7 +980,8 @@ async function confirmCreateFolder() {
   const { dir, name } = createFolderModal.value
   if (!dir) return
   try {
-    await FileService.CreateFolder(dir, name.trim() || '新建文件夹')
+    const path = await FileService.CreateFolder(dir, name.trim() || '新建文件夹')
+    operationHistory.recordCreateFolder(path)
     closeCreateFolderModal()
     notifyDirectoriesChanged([dir])
   } catch (err) {
@@ -1001,6 +1011,7 @@ async function confirmRenameEntry() {
   if (!entry || !trimmed) return
   try {
     const renamed = await FileService.RenameEntry(entry.path, trimmed)
+    operationHistory.recordRename(entry.path, renamed.path)
     closeRenameModal()
     updateRenamedEntry(entry.path, renamed)
     notifyDirectoriesChanged([props.path], { exclude: directoryEventToken })
@@ -1184,6 +1195,24 @@ async function handleEnterShortcut() {
   }
 }
 
+async function undoLastOperation() {
+  try {
+    await operationHistory.undo()
+  } catch (err) {
+    console.error('Undo failed:', err)
+    message.error(friendlyActionError(err))
+  }
+}
+
+async function redoLastOperation() {
+  try {
+    await operationHistory.redo()
+  } catch (err) {
+    console.error('Redo failed:', err)
+    message.error(friendlyActionError(err))
+  }
+}
+
 const shortcutActions: CategorizedShortcutAction[] = [
   { id: 'select-next', category: 'selection', label: '选择下一项', keys: [{ key: 'j' }], run: () => selectEntryByOffset(1) },
   { id: 'select-prev', category: 'selection', label: '选择上一项', keys: [{ key: 'k' }], run: () => selectEntryByOffset(-1) },
@@ -1197,6 +1226,8 @@ const shortcutActions: CategorizedShortcutAction[] = [
   { id: 'help', category: 'dialog', label: '显示热键速查表', keys: [{ key: '?', shift: true }], run: () => { shortcutHelpModal.value = true } },
   { id: 'copy', category: 'file', label: '复制当前项', keys: [{ key: 'y' }, { key: 'c', ctrlOrMeta: true }], run: () => copyCurrentEntries() },
   { id: 'paste', category: 'file', label: '粘贴到当前目录', keys: [{ key: 'p' }, { key: 'v', ctrlOrMeta: true }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
+  { id: 'undo', category: 'file', label: '撤销', keys: [{ key: 'z', ctrlOrMeta: true }], run: () => undoLastOperation(), disabled: () => !operationHistory.canUndo.value },
+  { id: 'redo', category: 'file', label: '重做', keys: [{ key: 'z', ctrlOrMeta: true, shift: true }, { key: 'y', ctrlOrMeta: true }], run: () => redoLastOperation(), disabled: () => !operationHistory.canRedo.value },
   { id: 'cut', category: 'file', label: '剪切当前项', keys: [{ key: 'x' }, { key: 'x', ctrlOrMeta: true }], run: () => cutCurrentEntries() },
   { id: 'rename', category: 'file', label: '重命名当前项', keys: [{ key: 'f2' }, { key: 'r' }], run: () => renameCurrentEntry() },
   { id: 'select-first', category: 'selection', label: '选择第一项', keys: [[{ key: 'g' }, { key: 'g' }]], run: () => selectFirstEntry() },
@@ -1298,6 +1329,26 @@ useKeyboardShortcuts(() => shortcutActions, {
         >
           <template #icon>
             <n-icon><RefreshSharp/></n-icon>
+          </template>
+        </NButton>
+        <NButton
+            text
+            :disabled="!operationHistory.canUndo.value"
+            title="撤销"
+            @click="undoLastOperation"
+        >
+          <template #icon>
+            <n-icon><UndoSharp/></n-icon>
+          </template>
+        </NButton>
+        <NButton
+            text
+            :disabled="!operationHistory.canRedo.value"
+            title="重做"
+            @click="redoLastOperation"
+        >
+          <template #icon>
+            <n-icon><RedoSharp/></n-icon>
           </template>
         </NButton>
         <NAutoComplete

@@ -15,12 +15,28 @@ export function CheckConflicts(paths: string[], destDir: string): $CancellablePr
     });
 }
 
-export function CopyEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<void> {
-    return $Call.ByID(2898335274, paths, destDir, conflict);
+export function CopyEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<$models.EntryOperationResult[]> {
+    return $Call.ByID(2898335274, paths, destDir, conflict).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+export function CopyEntriesToTargets(pairs: $models.EntryPathPair[]): $CancellablePromise<$models.EntryOperationResult[]> {
+    return $Call.ByID(2618535411, pairs).then(($result: any) => {
+        return $$createType2($result);
+    });
 }
 
 export function CreateFolder(parentDir: string, name: string): $CancellablePromise<string> {
     return $Call.ByID(732689535, parentDir, name);
+}
+
+export function CreateFolderAt(path: string): $CancellablePromise<string> {
+    return $Call.ByID(1281965482, path);
+}
+
+export function DeleteEmptyFolder(path: string): $CancellablePromise<string> {
+    return $Call.ByID(1114495993, path);
 }
 
 export function DeleteEntries(paths: string[]): $CancellablePromise<string[]> {
@@ -31,7 +47,7 @@ export function DeleteEntries(paths: string[]): $CancellablePromise<string[]> {
 
 export function GetFileInfo(path: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(1693135863, path).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType3($result);
     });
 }
 
@@ -41,7 +57,7 @@ export function GetHomeDir(): $CancellablePromise<string> {
 
 export function GetRoots(): $CancellablePromise<$models.RootEntry[]> {
     return $Call.ByID(578700098).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType5($result);
     });
 }
 
@@ -51,7 +67,7 @@ export function GetSeparator(): $CancellablePromise<string> {
 
 export function GetTrashInfo(): $CancellablePromise<$models.TrashInfo> {
     return $Call.ByID(3126279077).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType6($result);
     });
 }
 
@@ -61,12 +77,20 @@ export function IsSameDrive(path1: string, path2: string): $CancellablePromise<b
 
 export function ListDir(path: string): $CancellablePromise<$models.FileEntry[]> {
     return $Call.ByID(461256242, path).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType7($result);
     });
 }
 
-export function MoveEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<void> {
-    return $Call.ByID(1201006282, paths, destDir, conflict);
+export function MoveEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<$models.EntryOperationResult[]> {
+    return $Call.ByID(1201006282, paths, destDir, conflict).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+export function MoveEntriesToTargets(pairs: $models.EntryPathPair[]): $CancellablePromise<$models.EntryOperationResult[]> {
+    return $Call.ByID(1863354771, pairs).then(($result: any) => {
+        return $$createType2($result);
+    });
 }
 
 export function OpenFile(path: string): $CancellablePromise<void> {
@@ -83,7 +107,7 @@ export function OpenTrash(): $CancellablePromise<void> {
 
 export function RenameEntry(path: string, name: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(1533604623, path, name).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType3($result);
     });
 }
 
@@ -95,8 +119,10 @@ export function TrashEntries(paths: string[]): $CancellablePromise<string[]> {
 
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = $models.FileEntry.createFrom;
-const $$createType2 = $models.RootEntry.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $models.TrashInfo.createFrom;
-const $$createType5 = $Create.Array($$createType1);
+const $$createType1 = $models.EntryOperationResult.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = $models.FileEntry.createFrom;
+const $$createType4 = $models.RootEntry.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $models.TrashInfo.createFrom;
+const $$createType7 = $Create.Array($$createType3);

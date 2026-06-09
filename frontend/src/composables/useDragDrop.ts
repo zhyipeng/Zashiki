@@ -1,6 +1,6 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useMessage } from 'naive-ui'
-import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
+import type { EntryOperationResult, FileEntry } from '../../bindings/zashiki/internal/filemanager'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { notifyDirectoriesChanged } from './useDirectoryEvents'
 
@@ -15,6 +15,10 @@ interface PendingDrop {
   paths: string[]
   sourcePanel: string
   targetDir: string
+}
+
+interface DragDropOptions {
+  onOperationComplete?: (action: 'move' | 'copy', results: EntryOperationResult[]) => void
 }
 
 // Shared across all panels
@@ -35,7 +39,7 @@ export function clearDrag() {
   dragCleanup()
 }
 
-export function useDragDrop(currentPath: () => string) {
+export function useDragDrop(currentPath: () => string, options: DragDropOptions = {}) {
   const message = useMessage()
   const isDragOver = ref(false)
   dragOverRefs.add(isDragOver)
@@ -126,11 +130,13 @@ export function useDragDrop(currentPath: () => string) {
     dragPayload.value = null
 
     try {
+      let results: EntryOperationResult[]
       if (action === 'move') {
-        await FileService.MoveEntries(drop.paths, drop.targetDir, conflict)
+        results = await FileService.MoveEntries(drop.paths, drop.targetDir, conflict)
       } else {
-        await FileService.CopyEntries(drop.paths, drop.targetDir, conflict)
+        results = await FileService.CopyEntries(drop.paths, drop.targetDir, conflict)
       }
+      options.onOperationComplete?.(action, results)
       notifyDirectoriesChanged([drop.sourcePanel, drop.targetDir])
     } catch (err) {
       console.error('Drop operation failed:', err)

@@ -51,6 +51,32 @@ func (f *FileService) CreateFolder(parentDir string, name string) (string, error
 	return path, nil
 }
 
+func (f *FileService) CreateFolderAt(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("folder path cannot be empty")
+	}
+	parentDir := filepath.Dir(path)
+	parentInfo, err := os.Stat(parentDir)
+	if err != nil {
+		return "", err
+	}
+	if !parentInfo.IsDir() {
+		return "", fmt.Errorf("parent path %q is not a directory", parentDir)
+	}
+	if _, err := os.Stat(path); err == nil {
+		return "", fmt.Errorf("destination %q already exists", path)
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	if filepath.Dir(filepath.Clean(path)) == filepath.Clean(path) {
+		return "", fmt.Errorf("cannot create filesystem root %q", path)
+	}
+	if err := os.Mkdir(path, 0o755); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 func (f *FileService) RenameEntry(path string, name string) (FileEntry, error) {
 	if name == "" {
 		return FileEntry{}, fmt.Errorf("new name cannot be empty")
@@ -101,71 +127,170 @@ func (f *FileService) DeleteEntries(paths []string) ([]string, error) {
 	return deleted, nil
 }
 
-func (f *FileService) CopyEntries(paths []string, destDir string, conflict string) error {
+func (f *FileService) DeleteEmptyFolder(path string) (string, error) {
+	if err := validateDeletePath(path); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("path %q is not a directory", path)
+	}
+	if err := os.Remove(path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func (f *FileService) CopyEntries(paths []string, destDir string, conflict string) ([]EntryOperationResult, error) {
 	log.Printf("CopyEntries to %s, conflict=%s, files: %+v", destDir, conflict, paths)
+	results := make([]EntryOperationResult, 0, len(paths))
 	for _, src := range paths {
-		dst, err := resolveDst(src, destDir, conflict)
+		dst, overwritten, err := resolveDst(src, destDir, conflict)
 		if err != nil {
-			return err
+			return results, err
 		}
 		if dst == "" {
+			results = append(results, EntryOperationResult{
+				SourcePath: src,
+				Skipped:    true,
+			})
 			continue // skip
 		}
 		if err := copyEntry(src, dst); err != nil {
-			return err
+			return results, err
 		}
+		results = append(results, EntryOperationResult{
+			SourcePath:  src,
+			TargetPath:  dst,
+			Overwritten: overwritten,
+		})
 	}
-	return nil
+	return results, nil
 }
 
-func (f *FileService) MoveEntries(paths []string, destDir string, conflict string) error {
+func (f *FileService) MoveEntries(paths []string, destDir string, conflict string) ([]EntryOperationResult, error) {
 	log.Printf("MoveEntries to %s, conflict=%s, files: %+v", destDir, conflict, paths)
+	results := make([]EntryOperationResult, 0, len(paths))
 	for _, src := range paths {
-		dst, err := resolveDst(src, destDir, conflict)
+		dst, overwritten, err := resolveDst(src, destDir, conflict)
 		if err != nil {
-			return err
+			return results, err
 		}
 		if dst == "" {
+			results = append(results, EntryOperationResult{
+				SourcePath: src,
+				Skipped:    true,
+			})
 			continue
 		}
 		if err := os.Rename(src, dst); err != nil {
 			if err := copyEntry(src, dst); err != nil {
-				return err
+				return results, err
 			}
 			if err := os.RemoveAll(src); err != nil {
-				return err
+				return results, err
 			}
 		}
+		results = append(results, EntryOperationResult{
+			SourcePath:  src,
+			TargetPath:  dst,
+			Overwritten: overwritten,
+		})
 	}
-	return nil
+	return results, nil
 }
 
-func resolveDst(src, destDir, conflict string) (string, error) {
+func (f *FileService) CopyEntriesToTargets(pairs []EntryPathPair) ([]EntryOperationResult, error) {
+	results := make([]EntryOperationResult, 0, len(pairs))
+	for _, pair := range pairs {
+		if err := validateExactTarget(pair.SourcePath, pair.TargetPath); err != nil {
+			return results, err
+		}
+		if err := copyEntry(pair.SourcePath, pair.TargetPath); err != nil {
+			return results, err
+		}
+		results = append(results, EntryOperationResult{
+			SourcePath: pair.SourcePath,
+			TargetPath: pair.TargetPath,
+		})
+	}
+	return results, nil
+}
+
+func (f *FileService) MoveEntriesToTargets(pairs []EntryPathPair) ([]EntryOperationResult, error) {
+	results := make([]EntryOperationResult, 0, len(pairs))
+	for _, pair := range pairs {
+		if filepath.Clean(pair.SourcePath) == filepath.Clean(pair.TargetPath) {
+			results = append(results, EntryOperationResult{
+				SourcePath: pair.SourcePath,
+				TargetPath: pair.TargetPath,
+			})
+			continue
+		}
+		if err := validateExactTarget(pair.SourcePath, pair.TargetPath); err != nil {
+			return results, err
+		}
+		if err := os.Rename(pair.SourcePath, pair.TargetPath); err != nil {
+			if err := copyEntry(pair.SourcePath, pair.TargetPath); err != nil {
+				return results, err
+			}
+			if err := os.RemoveAll(pair.SourcePath); err != nil {
+				return results, err
+			}
+		}
+		results = append(results, EntryOperationResult{
+			SourcePath: pair.SourcePath,
+			TargetPath: pair.TargetPath,
+		})
+	}
+	return results, nil
+}
+
+func resolveDst(src, destDir, conflict string) (string, bool, error) {
 	if err := validateEntryDestination(src, destDir, ""); err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	dst := filepath.Join(destDir, filepath.Base(src))
 	if _, err := os.Stat(dst); os.IsNotExist(err) {
 		if err := validateEntryDestination(src, destDir, dst); err != nil {
-			return "", err
+			return "", false, err
 		}
-		return dst, nil
+		return dst, false, nil
 	}
+	overwritten := conflict != "skip" && conflict != "rename"
 	switch conflict {
 	case "skip":
-		return "", nil
+		return "", false, nil
 	case "rename":
 		dst = uniquePath(dst)
 	default: // overwrite
 	}
 	if dst == "" {
-		return "", nil
+		return "", false, nil
 	}
 	if err := validateEntryDestination(src, destDir, dst); err != nil {
-		return "", err
+		return "", false, err
 	}
-	return dst, nil
+	return dst, overwritten, nil
+}
+
+func validateExactTarget(src, target string) error {
+	if target == "" {
+		return fmt.Errorf("target path cannot be empty")
+	}
+	if err := validateEntryDestination(src, filepath.Dir(target), target); err != nil {
+		return err
+	}
+	if _, err := os.Stat(target); err == nil {
+		return fmt.Errorf("destination %q already exists", target)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func validateEntryDestination(src, destDir, dst string) error {

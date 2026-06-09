@@ -20,3 +20,15 @@ type RootEntry struct {
 	FreeSpace  uint64 `json:"freeSpace"`
 	TotalSpace uint64 `json:"totalSpace"`
 }
+
+type EntryOperationResult struct {
+	SourcePath  string `json:"sourcePath"`
+	TargetPath  string `json:"targetPath"`
+	Skipped     bool   `json:"skipped"`
+	Overwritten bool   `json:"overwritten"`
+}
+
+type EntryPathPair struct {
+	SourcePath string `json:"sourcePath"`
+	TargetPath string `json:"targetPath"`
+}
