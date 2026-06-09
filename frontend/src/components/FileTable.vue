@@ -882,6 +882,16 @@ function toggleCurrentEntrySelection() {
   toggleSelectedRow(entry.path)
 }
 
+function selectAllEntries() {
+  const selectableKeys = visibleEntries.value
+    .filter(entry => !isParentEntry(entry))
+    .map(entry => entry.path)
+  if (selectableKeys.length === 0) return
+  multiSelectMode.value = true
+  selectedRowKeys.value = selectableKeys
+  currentRowKey.value = selectableKeys[selectableKeys.length - 1]
+}
+
 function operationEntriesForEntry(entry: FileEntry): FileEntry[] {
   if (isParentEntry(entry)) return [entry]
   if (multiSelectMode.value && selectedPathSet.value.has(entry.path)) {
@@ -1182,6 +1192,7 @@ const shortcutActions: CategorizedShortcutAction[] = [
   { id: 'toggle-search', category: 'search', label: '切换搜索栏', keys: [{ key: '/' }, { key: 'f', ctrlOrMeta: true, allowInEditable: true }], run: () => toggleSearch() },
   { id: 'escape', category: 'dialog', label: '退出搜索/多选/弹窗', keys: [{ key: 'escape' }], run: () => handleEscapeShortcut(), allowInEditable: true },
   { id: 'toggle-multi-select', category: 'selection', label: '切换多选模式', keys: [{ key: 'm' }], run: () => toggleMultiSelectMode() },
+  { id: 'select-all', category: 'selection', label: '选择全部', keys: [{ key: 'a', ctrlOrMeta: true }], run: () => selectAllEntries() },
   { id: 'toggle-current-selection', category: 'selection', label: '切换当前项选择', keys: [{ key: 'space' }], run: () => toggleCurrentEntrySelection(), disabled: () => !multiSelectMode.value },
   { id: 'help', category: 'dialog', label: '显示热键速查表', keys: [{ key: '?', shift: true }], run: () => { shortcutHelpModal.value = true } },
   { id: 'copy', category: 'file', label: '复制当前项', keys: [{ key: 'y' }, { key: 'c', ctrlOrMeta: true }], run: () => copyCurrentEntries() },
