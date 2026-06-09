@@ -5,8 +5,8 @@ let activeFileTableShortcutScopeId = 0
 
 <script setup lang="ts">
 import { ref, watch, computed, h, nextTick, onMounted } from 'vue'
-import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
-import type { DataTableColumns, DataTableInst, DataTableSortState, DropdownOption } from 'naive-ui'
+import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NAutoComplete, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
+import type { AutoCompleteInst, AutoCompleteOption, DataTableColumns, DataTableInst, DataTableSortState, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
@@ -20,7 +20,7 @@ import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
 import { notifyDirectoriesChanged, useDirectoryEvents } from '../composables/useDirectoryEvents'
 import DropConfirmModal from './DropConfirmModal.vue'
 import { fileTypeLabel, resolveFileIcon } from './fileIcons'
-import { parentPath as getParentPath } from './path'
+import { joinPath, parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
 const message = useMessage()
@@ -423,8 +423,14 @@ const parentEntry = computed<FileEntry | null>(() => {
 })
 
 const pathInput = ref(props.path)
-watch(() => props.path, (p) => { pathInput.value = p })
-const pathInputRef = ref<InstanceType<typeof NInput> | null>(null)
+watch(() => props.path, (p) => {
+  pathInput.value = p
+  pathAutocompleteOptions.value = []
+})
+const pathInputRef = ref<AutoCompleteInst | null>(null)
+const pathAutocompleteOptions = ref<AutoCompleteOption[]>([])
+const pathAutocompleteLoading = ref(false)
+let pathAutocompleteRequestId = 0
 const searchVisible = ref(false)
 const searchQuery = ref('')
 const searchInputRef = ref<InstanceType<typeof NInput> | null>(null)
@@ -439,6 +445,74 @@ function onPathSubmit() {
     emit('navigate', trimmed)
   }
   focusFileTable()
+}
+
+function onPathInput(value: string) {
+  pathInput.value = value
+  pathError.value = false
+  void updatePathAutocompleteOptions(value)
+}
+
+async function updatePathAutocompleteOptions(value: string) {
+  const requestId = ++pathAutocompleteRequestId
+  const input = value.trim()
+  const query = pathCompletionQuery(input)
+  if (!query) {
+    pathAutocompleteOptions.value = []
+    return
+  }
+
+  pathAutocompleteLoading.value = true
+  try {
+    const result = await FileService.ListDir(query.dir)
+    if (requestId !== pathAutocompleteRequestId) return
+    const normalizedPart = query.part.toLowerCase()
+    pathAutocompleteOptions.value = (result || [])
+      .filter(entry => entry.isDir)
+      .filter(entry => settings.showHiddenFiles || !entry.isHidden)
+      .filter(entry => entry.name.toLowerCase().startsWith(normalizedPart))
+      .slice(0, 50)
+      .map(entry => {
+        const value = joinCompletionPath(query.dir, entry.name)
+        return {
+          label: value + props.separator,
+          value,
+        }
+      })
+  } catch {
+    if (requestId === pathAutocompleteRequestId) {
+      pathAutocompleteOptions.value = []
+    }
+  } finally {
+    if (requestId === pathAutocompleteRequestId) {
+      pathAutocompleteLoading.value = false
+    }
+  }
+}
+
+function pathCompletionQuery(input: string): { dir: string, part: string } | null {
+  if (!input) return null
+  const separators = props.separator === '\\' ? ['\\', '/'] : ['/']
+  let index = -1
+  for (const separator of separators) {
+    index = Math.max(index, input.lastIndexOf(separator))
+  }
+  if (index < 0) return { dir: props.path, part: input }
+
+  const dir = input.slice(0, index + 1)
+  if (!dir) return null
+  return { dir: trimCompletionDir(dir), part: input.slice(index + 1) }
+}
+
+function trimCompletionDir(dir: string): string {
+  if (props.separator !== '\\') return dir === '/' ? dir : dir.replace(/\/+$/, '')
+  const normalized = dir.replace(/\//g, '\\')
+  const root = normalized.match(/^[A-Za-z]:\\$/) || normalized.match(/^\\\\[^\\]+\\[^\\]+\\$/)
+  return root ? normalized : normalized.replace(/\\+$/, '')
+}
+
+function joinCompletionPath(dir: string, name: string): string {
+  return joinPath(dir, name, props.separator)
 }
 
 function toggleSearch() {
@@ -1070,7 +1144,7 @@ const shortcutActions: ShortcutAction[] = [
   { id: 'delete', label: `移到${trashLabel.value}`, keys: [{ key: 'd' }, { key: 'delete' }], run: () => deleteCurrentEntries() },
   { id: 'permanent-delete', label: '永久删除当前项', keys: [{ key: 'd', shift: true }, { key: 'delete', shift: true }], run: () => permanentlyDeleteCurrentEntries() },
   { id: 'confirm', label: '确认当前弹窗', keys: [{ key: 'enter' }], run: () => handleEnterShortcut(), allowInEditable: true, disabled: () => !deleteConfirmModal.value.show && !renameModal.value.show },
-  { id: 'focus-path', label: '聚焦路径栏', keys: [{ key: 'o' }], run: () => focusPathInput() },
+  { id: 'focus-path', label: '聚焦路径栏', keys: [{ key: 'o' }, { key: 'l', ctrlOrMeta: true }], run: () => focusPathInput() },
   { id: 'refresh', label: '刷新', keys: [{ key: 'r', ctrlOrMeta: true }], run: () => refresh() },
   { id: 'split-vertical', label: '竖直分屏', keys: [{ key: 'd', ctrlOrMeta: true }], run: () => emit('splitV') },
   { id: 'split-horizontal', label: '水平分屏', keys: [{ key: 'd', ctrlOrMeta: true, shift: true }], run: () => emit('splitH') },
@@ -1146,15 +1220,18 @@ useKeyboardShortcuts(() => shortcutActions, {
             <n-icon><RefreshSharp/></n-icon>
           </template>
         </NButton>
-        <NInput
+        <NAutoComplete
           ref="pathInputRef"
           class="path-input"
-          v-model:value="pathInput"
-          size="tiny"
+          :value="pathInput"
+          :options="pathAutocompleteOptions"
+          :loading="pathAutocompleteLoading"
+          size="small"
           placeholder="输入路径后回车"
           :status="pathError ? 'error' : undefined"
+          clearable
+          @update:value="onPathInput"
           @keyup.enter="onPathSubmit"
-          @input="pathError = false"
         />
         <NButton
           text
