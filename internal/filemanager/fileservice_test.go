@@ -84,6 +84,59 @@ func TestFileService_CreateFolder(t *testing.T) {
 	}
 }
 
+func TestFileService_RenameEntry(t *testing.T) {
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "old.txt")
+	if err := os.WriteFile(oldPath, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	entry, err := s.RenameEntry(oldPath, "new.txt")
+	if err != nil {
+		t.Fatalf("RenameEntry() error = %v", err)
+	}
+	if entry.Name != "new.txt" {
+		t.Fatalf("Name = %q, want new.txt", entry.Name)
+	}
+	if entry.Path != filepath.Join(dir, "new.txt") {
+		t.Fatalf("Path = %q, want renamed path", entry.Path)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("old path should not exist, stat error = %v", err)
+	}
+}
+
+func TestFileService_RenameEntryRejectsInvalidName(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file.txt")
+	if err := os.WriteFile(path, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	if _, err := s.RenameEntry(path, filepath.Join("nested", "file.txt")); err == nil {
+		t.Fatal("RenameEntry() expected error for path-like name")
+	}
+}
+
+func TestFileService_RenameEntryRejectsExistingDestination(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file.txt")
+	existing := filepath.Join(dir, "existing.txt")
+	if err := os.WriteFile(path, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(existing, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	if _, err := s.RenameEntry(path, "existing.txt"); err == nil {
+		t.Fatal("RenameEntry() expected error for existing destination")
+	}
+}
+
 func TestFileService_DeleteEntries(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "file.txt")

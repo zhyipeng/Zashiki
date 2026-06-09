@@ -51,6 +51,42 @@ func (f *FileService) CreateFolder(parentDir string, name string) (string, error
 	return path, nil
 }
 
+func (f *FileService) RenameEntry(path string, name string) (FileEntry, error) {
+	if name == "" {
+		return FileEntry{}, fmt.Errorf("new name cannot be empty")
+	}
+	if filepath.Base(name) != name || name == "." || name == ".." {
+		return FileEntry{}, fmt.Errorf("invalid entry name %q", name)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return FileEntry{}, err
+	}
+	if filepath.Dir(filepath.Clean(path)) == filepath.Clean(path) {
+		return FileEntry{}, fmt.Errorf("cannot rename filesystem root %q", path)
+	}
+
+	dst := filepath.Join(filepath.Dir(path), name)
+	if filepath.Clean(dst) == filepath.Clean(path) {
+		return fileEntryFromInfo(info.Name(), path, info), nil
+	}
+	if _, err := os.Stat(dst); err == nil {
+		return FileEntry{}, fmt.Errorf("destination %q already exists", dst)
+	} else if !os.IsNotExist(err) {
+		return FileEntry{}, err
+	}
+	if err := os.Rename(path, dst); err != nil {
+		return FileEntry{}, err
+	}
+
+	newInfo, err := os.Lstat(dst)
+	if err != nil {
+		return FileEntry{}, err
+	}
+	return fileEntryFromInfo(newInfo.Name(), dst, newInfo), nil
+}
+
 func (f *FileService) DeleteEntries(paths []string) ([]string, error) {
 	deleted := make([]string, 0, len(paths))
 	for _, path := range paths {

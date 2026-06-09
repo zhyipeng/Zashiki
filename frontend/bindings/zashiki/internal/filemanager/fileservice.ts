@@ -71,6 +71,12 @@ export function OpenTerminal(path: string): $CancellablePromise<void> {
     return $Call.ByID(2322032555, path);
 }
 
+export function RenameEntry(path: string, name: string): $CancellablePromise<$models.FileEntry> {
+    return $Call.ByID(1533604623, path, name).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = $models.FileEntry.createFrom;

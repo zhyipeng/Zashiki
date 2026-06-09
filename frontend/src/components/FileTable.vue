@@ -111,7 +111,7 @@ const selectedRowKeys = ref<string[]>([])
 const currentRowKey = ref('')
 const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
-type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'copy-path' | 'copy' | 'cut' | 'delete'
+type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete'
 
 interface ContextMenuAction {
   key: ContextActionKey
@@ -136,6 +136,11 @@ const createFolderModal = ref({
   show: false,
   dir: '',
   name: '新建文件夹',
+})
+const renameModal = ref({
+  show: false,
+  entry: null as FileEntry | null,
+  name: '',
 })
 const deleteConfirmModal = ref({
   show: false,
@@ -193,6 +198,15 @@ const contextMenuActions: ContextMenuAction[] = [
     run: async (target) => {
       if (target.kind !== 'entry') return
       await openEntries(operationEntriesForEntry(target.entry))
+    },
+  },
+  {
+    key: 'rename',
+    label: '重命名',
+    targets: ['entry'],
+    run: (target) => {
+      if (target.kind !== 'entry') return
+      openRenameModal(target.entry)
     },
   },
   {
@@ -686,6 +700,12 @@ function deleteCurrentEntries() {
   openDeleteConfirmModal(entries)
 }
 
+function renameCurrentEntry() {
+  const entry = currentEntry()
+  if (!entry || isParentEntry(entry)) return
+  openRenameModal(entry)
+}
+
 function toggleCurrentEntrySelection() {
   if (!multiSelectMode.value) return
   const entry = currentEntry()
@@ -772,6 +792,40 @@ async function confirmCreateFolder() {
   } catch (err) {
     console.error('Create folder failed:', err)
     message.error(friendlyActionError(err))
+  }
+}
+
+function openRenameModal(entry: FileEntry) {
+  renameModal.value = {
+    show: true,
+    entry,
+    name: entry.name,
+  }
+}
+
+function closeRenameModal() {
+  renameModal.value.show = false
+}
+
+async function confirmRenameEntry() {
+  const { entry, name } = renameModal.value
+  const trimmed = name.trim()
+  if (!entry || !trimmed) return
+  try {
+    const renamed = await FileService.RenameEntry(entry.path, trimmed)
+    closeRenameModal()
+    updateRenamedEntry(entry.path, renamed)
+  } catch (err) {
+    console.error('Rename entry failed:', err)
+    message.error(friendlyActionError(err))
+  }
+}
+
+function updateRenamedEntry(oldPath: string, renamed: FileEntry) {
+  entries.value = entries.value.map(entry => entry.path === oldPath ? renamed : entry)
+  selectedRowKeys.value = selectedRowKeys.value.map(path => path === oldPath ? renamed.path : path)
+  if (currentRowKey.value === oldPath) {
+    setCurrentEntry(renamed)
   }
 }
 
@@ -894,6 +948,10 @@ function handleEscapeShortcut() {
     closeCreateFolderModal()
     return
   }
+  if (renameModal.value.show) {
+    closeRenameModal()
+    return
+  }
   if (contextMenu.value.show) {
     hideContextMenu()
     return
@@ -908,6 +966,10 @@ function handleEscapeShortcut() {
 }
 
 async function handleEnterShortcut() {
+  if (renameModal.value.show) {
+    await confirmRenameEntry()
+    return
+  }
   if (deleteConfirmModal.value.show) {
     await confirmDeleteEntry()
   }
@@ -926,11 +988,13 @@ const shortcutActions: ShortcutAction[] = [
   { id: 'copy', label: '复制当前项', keys: [{ key: 'y' }, { key: 'c', ctrlOrMeta: true }], run: () => copyCurrentEntries() },
   { id: 'paste', label: '粘贴到当前目录', keys: [{ key: 'p' }, { key: 'v', ctrlOrMeta: true }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
   { id: 'cut', label: '剪切当前项', keys: [{ key: 'x' }, { key: 'x', ctrlOrMeta: true }], run: () => cutCurrentEntries() },
+  { id: 'rename', label: '重命名当前项', keys: [{ key: 'f2' }, { key: 'r' }], run: () => renameCurrentEntry() },
   { id: 'select-first', label: '选择第一项', keys: [[{ key: 'g' }, { key: 'g' }]], run: () => selectFirstEntry() },
   { id: 'select-last', label: '选择最后一项', keys: [{ key: 'g', shift: true }], run: () => selectLastEntry() },
   { id: 'delete', label: '删除当前项', keys: [{ key: 'd' }, { key: 'delete' }], run: () => deleteCurrentEntries() },
-  { id: 'confirm', label: '确认当前弹窗', keys: [{ key: 'enter' }], run: () => handleEnterShortcut(), allowInEditable: true, disabled: () => !deleteConfirmModal.value.show },
+  { id: 'confirm', label: '确认当前弹窗', keys: [{ key: 'enter' }], run: () => handleEnterShortcut(), allowInEditable: true, disabled: () => !deleteConfirmModal.value.show && !renameModal.value.show },
   { id: 'focus-path', label: '聚焦路径栏', keys: [{ key: 'o' }], run: () => focusPathInput() },
+  { id: 'refresh', label: '刷新', keys: [{ key: 'r', ctrlOrMeta: true }], run: () => refresh() },
   { id: 'split-vertical', label: '竖直分屏', keys: [{ key: 'd', ctrlOrMeta: true }], run: () => emit('splitV') },
   { id: 'split-horizontal', label: '水平分屏', keys: [{ key: 'd', ctrlOrMeta: true, shift: true }], run: () => emit('splitH') },
   { id: 'close-panel', label: '关闭当前面板', keys: [{ key: 'w', ctrlOrMeta: true }], run: () => emit('close'), disabled: () => !props.closable },
@@ -1159,6 +1223,27 @@ useKeyboardShortcuts(() => shortcutActions, {
         <NSpace justify="end">
           <NButton @click="closeCreateFolderModal">取消</NButton>
           <NButton type="primary" @click="confirmCreateFolder">创建</NButton>
+        </NSpace>
+      </template>
+    </NModal>
+    <NModal
+      v-model:show="renameModal.show"
+      preset="card"
+      title="重命名"
+      style="width: 360px"
+    >
+      <div class="modal-body">
+        <NInput
+          v-model:value="renameModal.name"
+          placeholder="新名称"
+          autofocus
+          @keyup.enter="confirmRenameEntry"
+        />
+      </div>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="closeRenameModal">取消</NButton>
+          <NButton type="primary" @click="confirmRenameEntry">重命名</NButton>
         </NSpace>
       </template>
     </NModal>
