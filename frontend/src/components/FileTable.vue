@@ -142,6 +142,7 @@ const renameModal = ref({
   entry: null as FileEntry | null,
   name: '',
 })
+const renameInputRef = ref<InstanceType<typeof NInput> | null>(null)
 const deleteConfirmModal = ref({
   show: false,
   entries: [] as FileEntry[],
@@ -801,6 +802,9 @@ function openRenameModal(entry: FileEntry) {
     entry,
     name: entry.name,
   }
+  nextTick(() => {
+    selectRenameText(entry)
+  })
 }
 
 function closeRenameModal() {
@@ -827,6 +831,21 @@ function updateRenamedEntry(oldPath: string, renamed: FileEntry) {
   if (currentRowKey.value === oldPath) {
     setCurrentEntry(renamed)
   }
+}
+
+function selectRenameText(entry: FileEntry) {
+  const input = renameInputRef.value?.inputElRef
+  if (!input) return
+  const selectionEnd = renameSelectionEnd(entry)
+  input.focus()
+  input.setSelectionRange(0, selectionEnd)
+}
+
+function renameSelectionEnd(entry: FileEntry): number {
+  if (entry.isDir) return entry.name.length
+  const dotIndex = entry.name.lastIndexOf('.')
+  if (dotIndex <= 0) return entry.name.length
+  return dotIndex
 }
 
 function openDeleteConfirmModal(entries: FileEntry[]) {
@@ -1234,6 +1253,7 @@ useKeyboardShortcuts(() => shortcutActions, {
     >
       <div class="modal-body">
         <NInput
+          ref="renameInputRef"
           v-model:value="renameModal.name"
           placeholder="新名称"
           autofocus
