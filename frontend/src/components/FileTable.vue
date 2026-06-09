@@ -16,6 +16,7 @@ import { parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
 const message = useMessage()
+const parentEntryPathPrefix = '__zashiki_parent__:'
 const fileClipboard = useFileClipboard()
 const cutPathSet = computed(() => {
   const clipboard = fileClipboard.clipboard.value
@@ -23,8 +24,11 @@ const cutPathSet = computed(() => {
   return new Set(clipboard.paths)
 })
 const visibleEntries = computed(() => {
-  if (settings.showHiddenFiles) return entries.value
-  return entries.value.filter((e: FileEntry) => !e.isHidden)
+  const filteredEntries = settings.showHiddenFiles
+    ? entries.value
+    : entries.value.filter((e: FileEntry) => !e.isHidden)
+  const parent = parentEntry.value
+  return parent ? [parent, ...filteredEntries] : filteredEntries
 })
 
 const props = defineProps<{
@@ -297,6 +301,22 @@ function compareTime(a: unknown, b: unknown): number {
   return left - right
 }
 
+function isParentEntry(row: FileEntry): boolean {
+  return row.path.startsWith(parentEntryPathPrefix)
+}
+
+function actualEntryPath(row: FileEntry): string {
+  return isParentEntry(row) ? row.path.slice(parentEntryPathPrefix.length) : row.path
+}
+
+function comparePinnedParent(row1: FileEntry, row2: FileEntry): number | null {
+  const leftParent = isParentEntry(row1)
+  const rightParent = isParentEntry(row2)
+  if (leftParent && !rightParent) return -1
+  if (!leftParent && rightParent) return 1
+  return null
+}
+
 function goBack() {
   if (!canGoBack.value) return
   historyIndex.value--
@@ -322,6 +342,20 @@ function goHome() {
 const parentPath = computed(() => {
   return getParentPath(props.path, props.separator)
 })
+const parentEntry = computed<FileEntry | null>(() => {
+  if (!parentPath.value) return null
+  return {
+    name: '..',
+    path: `${parentEntryPathPrefix}${parentPath.value}`,
+    size: 0,
+    modTime: null,
+    isDir: true,
+    isHidden: false,
+    isSymlink: false,
+    linkTarget: '',
+    isExecutable: false,
+  }
+})
 
 const pathInput = ref(props.path)
 watch(() => props.path, (p) => { pathInput.value = p })
@@ -337,7 +371,7 @@ const baseColumns: DataTableColumns<FileEntry> = [
   {
     title: 'Name',
     key: 'name',
-    sorter: (row1, row2) => compareText(row1.name, row2.name),
+    sorter: (row1, row2) => comparePinnedParent(row1, row2) ?? compareText(row1.name, row2.name),
     render(row) {
       const fileIcon = resolveFileIcon(row)
       return h('div', { class: 'file-name-cell' }, [
@@ -355,7 +389,7 @@ const baseColumns: DataTableColumns<FileEntry> = [
     title: 'Type',
     key: 'type',
     width: '110px',
-    sorter: (row1, row2) => compareText(fileTypeLabel(row1), fileTypeLabel(row2)),
+    sorter: (row1, row2) => comparePinnedParent(row1, row2) ?? compareText(fileTypeLabel(row1), fileTypeLabel(row2)),
     render(row) {
       return fileTypeLabel(row)
     },
@@ -364,7 +398,7 @@ const baseColumns: DataTableColumns<FileEntry> = [
     title: 'Size',
     key: 'size',
     width: '85px',
-    sorter: (row1, row2) => row1.size - row2.size,
+    sorter: (row1, row2) => comparePinnedParent(row1, row2) ?? row1.size - row2.size,
     render(row) {
       return row.isDir ? '-' : formatSize(row.size)
     },
@@ -373,7 +407,7 @@ const baseColumns: DataTableColumns<FileEntry> = [
     title: 'Modified',
     key: 'modTime',
     width: '165px',
-    sorter: (row1, row2) => compareTime(row1.modTime, row2.modTime),
+    sorter: (row1, row2) => comparePinnedParent(row1, row2) ?? compareTime(row1.modTime, row2.modTime),
     render(row) {
       return formatTime(row.modTime)
     },
@@ -386,6 +420,7 @@ const columns = computed<DataTableColumns<FileEntry>>(() => {
     {
       type: 'selection',
       width: 36,
+      disabled: (row) => isParentEntry(row),
     },
     ...baseColumns,
   ]
@@ -397,7 +432,7 @@ async function onRowDblclick(row: FileEntry) {
 
 async function openEntry(row: FileEntry) {
   if (row.isDir) {
-    emit('navigate', row.path)
+    emit('navigate', actualEntryPath(row))
   } else {
     try {
       await FileService.OpenFile(row.path)
@@ -436,7 +471,7 @@ function onUpdateCheckedRowKeys(keys: Array<string | number>) {
 }
 
 function onRowClick(e: MouseEvent, row: FileEntry) {
-  if (!multiSelectMode.value) return
+  if (!multiSelectMode.value || isParentEntry(row)) return
   const target = e.target as HTMLElement | null
   if (target?.closest('.n-checkbox, button, input, textarea, a')) return
   toggleSelectedRow(row.path)
@@ -457,6 +492,7 @@ function selectedEntries() {
 }
 
 function operationEntriesForEntry(entry: FileEntry): FileEntry[] {
+  if (isParentEntry(entry)) return [entry]
   if (multiSelectMode.value && selectedPathSet.value.has(entry.path)) {
     const selected = selectedEntries()
     if (selected.length > 0) return selected
@@ -468,6 +504,7 @@ function operationEntriesForEntry(entry: FileEntry): FileEntry[] {
 }
 
 function dragPathsForRow(row: FileEntry): string[] {
+  if (isParentEntry(row)) return []
   return operationEntriesForEntry(row).map(entry => entry.path)
 }
 
@@ -497,6 +534,10 @@ function onTableContextMenu(e: MouseEvent) {
 
 function onRowContextMenu(e: MouseEvent, row: FileEntry) {
   e.stopPropagation()
+  if (isParentEntry(row)) {
+    e.preventDefault()
+    return
+  }
   if (multiSelectMode.value && !selectedPathSet.value.has(row.path)) {
     exitMultiSelectMode()
   }
@@ -721,8 +762,8 @@ function friendlyActionError(err: unknown): string {
             selectedPathSet.has(row.path) ? 'selected-entry' : '',
             cutPathSet.has(row.path) ? 'cut-entry' : '',
           ].filter(Boolean).join(' '),
-          'data-folder-path': row.isDir ? row.path : undefined,
-          draggable: true,
+          'data-folder-path': row.isDir && !isParentEntry(row) ? row.path : undefined,
+          draggable: !isParentEntry(row),
           onDragstart: (e: DragEvent) => onRowDragStart(e, row, dragPathsForRow(row)),
           onDragend: () => clearDrag(),
           onClick: (e: MouseEvent) => onRowClick(e, row),
