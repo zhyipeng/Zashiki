@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import {ref, onMounted, watch} from 'vue'
+import {ref, onMounted, onUnmounted, watch} from 'vue'
 import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider, NFlex, NButton, NIcon} from 'naive-ui'
 import Sidebar from './components/Sidebar.vue'
 import SplitNode from './components/SplitNode.vue'
-import {createLeaf, splitLeaf, closeLeaf, navigateLeaf, getFirstLeafId, findLeafById} from './components/tree'
+import {createLeaf, splitLeaf, closeLeaf, navigateLeaf, getFirstLeafId, getLeafIds, findLeafById} from './components/tree'
 import type {TreeNode} from './components/tree'
 import {FileService} from '../bindings/zashiki/internal/filemanager'
 import { Settings28Regular } from '@vicons/fluent'
@@ -23,6 +23,7 @@ const rootNode = ref<TreeNode>(createLeaf(nextId++, ''))
 const focusedId = ref(1)
 
 onMounted(async () => {
+  window.addEventListener('keydown', onGlobalKeydown)
   try {
     const [home, sep, rootDirs] = await Promise.all([
       FileService.GetHomeDir(),
@@ -40,6 +41,10 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onGlobalKeydown)
 })
 
 // sidebar → focused panel
@@ -71,7 +76,11 @@ function handleNavigate(leafId: number, path: string) {
 }
 
 function handleSplit(leafId: number, direction: 'horizontal' | 'vertical') {
-  rootNode.value = splitLeaf(rootNode.value, leafId, nextId++, nextId++, direction)
+  const newLeafId = nextId++
+  rootNode.value = splitLeaf(rootNode.value, leafId, newLeafId, nextId++, direction)
+  focusedId.value = newLeafId
+  const leaf = findLeafById(rootNode.value, newLeafId)
+  if (leaf) currentPath.value = leaf.path
 }
 
 function handleClose(leafId: number) {
@@ -90,6 +99,31 @@ function handleFocus(leafId: number, path: string) {
   if (focusedId.value === leafId) return
   focusedId.value = leafId
   currentPath.value = path
+}
+
+function handleFocusNextPanel(fromLeafId: number) {
+  const leafIds = getLeafIds(rootNode.value)
+  if (leafIds.length <= 1) return
+  const currentIndex = leafIds.indexOf(fromLeafId)
+  const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % leafIds.length
+  const nextId = leafIds[nextIndex]
+  const leaf = findLeafById(rootNode.value, nextId)
+  if (!leaf) return
+  focusedId.value = nextId
+  currentPath.value = leaf.path
+}
+
+function onGlobalKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+  if (isEditableTarget(event.target)) return
+  event.preventDefault()
+  handleFocusNextPanel(focusedId.value)
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName.toLowerCase()
+  return tag === 'input' || tag === 'textarea' || target.isContentEditable
 }
 </script>
 
@@ -137,6 +171,7 @@ function handleFocus(leafId: number, path: string) {
                   @split="handleSplit"
                   @close="handleClose"
                   @focus="handleFocus"
+                  @focus-next="handleFocusNextPanel"
               />
             </div>
           </template>

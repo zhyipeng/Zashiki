@@ -17,6 +17,7 @@ const emit = defineEmits<{
   split: [id: number, direction: 'horizontal' | 'vertical']
   close: [id: number]
   focus: [id: number, path: string]
+  focusNext: [id: number]
 }>()
 
 // Our direction → NSplit direction:
@@ -38,12 +39,14 @@ function nsDir(dir: 'horizontal' | 'vertical') {
       <FileTable
         :path="node.path"
         :closable="closable"
+        :focused="node.id === focusedId"
         :separator="separator"
         :home-dir="homeDir"
         @navigate="(path: string) => emit('navigate', node.id, path)"
         @split-h="emit('split', node.id, 'horizontal')"
         @split-v="emit('split', node.id, 'vertical')"
         @close="emit('close', node.id)"
+        @focus-next="emit('focusNext', node.id)"
       />
     </div>
     <NSplit
@@ -65,6 +68,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           @split="(id, dir) => emit('split', id, dir)"
           @close="(id) => emit('close', id)"
           @focus="(id, path) => emit('focus', id, path)"
+          @focus-next="(id) => emit('focusNext', id)"
         />
       </template>
       <template #[2]>
@@ -78,6 +82,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           @split="(id, dir) => emit('split', id, dir)"
           @close="(id) => emit('close', id)"
           @focus="(id, path) => emit('focus', id, path)"
+          @focus-next="(id) => emit('focusNext', id)"
         />
       </template>
     </NSplit>

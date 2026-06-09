@@ -4,7 +4,7 @@ let activeFileTableShortcutScopeId = 0
 </script>
 
 <script setup lang="ts">
-import { ref, watch, computed, h, nextTick } from 'vue'
+import { ref, watch, computed, h, nextTick, onMounted } from 'vue'
 import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
 import type { DataTableColumns, DataTableInst, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
@@ -25,9 +25,6 @@ const { settings } = useSettings()
 const message = useMessage()
 const parentEntryPathPrefix = '__zashiki_parent__:'
 const shortcutScopeId = nextFileTableShortcutScopeId++
-if (activeFileTableShortcutScopeId === 0) {
-  activeFileTableShortcutScopeId = shortcutScopeId
-}
 const fileTableRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<DataTableInst | null>(null)
 const fileClipboard = useFileClipboard()
@@ -48,6 +45,7 @@ const visibleEntries = computed(() => {
 const props = defineProps<{
   path: string
   closable?: boolean
+  focused?: boolean
   separator: string
   homeDir: string
 }>()
@@ -100,6 +98,7 @@ const emit = defineEmits<{
   splitH: []
   splitV: []
   close: []
+  focusNext: []
 }>()
 
 const entries = ref<FileEntry[]>([])
@@ -857,8 +856,24 @@ function activateShortcutScope() {
   activeFileTableShortcutScopeId = shortcutScopeId
 }
 
+onMounted(() => {
+  if (props.focused || activeFileTableShortcutScopeId === 0) {
+    activateShortcutScope()
+    if (props.focused) {
+      nextTick(() => focusFileTable())
+    }
+  }
+})
+
+watch(() => props.focused, (focused) => {
+  if (focused) {
+    activateShortcutScope()
+    nextTick(() => focusFileTable())
+  }
+})
+
 function isShortcutScopeActive() {
-  return activeFileTableShortcutScopeId === shortcutScopeId
+  return props.focused === true
 }
 
 function handleEscapeShortcut() {
@@ -917,6 +932,8 @@ const shortcutActions: ShortcutAction[] = [
   { id: 'focus-path', label: '聚焦路径栏', keys: [{ key: 'o' }], run: () => focusPathInput() },
   { id: 'split-vertical', label: '竖直分屏', keys: [{ key: 'd', ctrlOrMeta: true }], run: () => emit('splitV') },
   { id: 'split-horizontal', label: '水平分屏', keys: [{ key: 'd', ctrlOrMeta: true, shift: true }], run: () => emit('splitH') },
+  { id: 'close-panel', label: '关闭当前面板', keys: [{ key: 'w', ctrlOrMeta: true }], run: () => emit('close'), disabled: () => !props.closable },
+  { id: 'focus-next-panel', label: '切换到下一个面板', keys: [{ key: 'tab' }], run: () => {}, disabled: () => true },
 ]
 
 const shortcutHelpRows = computed(() => shortcutActions.map(action => ({
@@ -1168,7 +1185,7 @@ useKeyboardShortcuts(() => shortcutActions, {
       v-model:show="shortcutHelpModal"
       preset="card"
       title="快捷键"
-      style="width: 420px"
+      style="width: 520px"
     >
       <div class="shortcut-help">
         <div
@@ -1347,7 +1364,7 @@ useKeyboardShortcuts(() => shortcutActions, {
 
 .shortcut-help-row {
   display: grid;
-  grid-template-columns: 130px 1fr;
+  grid-template-columns: 210px 1fr;
   align-items: center;
   gap: 12px;
   font-size: 13px;
@@ -1356,6 +1373,7 @@ useKeyboardShortcuts(() => shortcutActions, {
 .shortcut-help-keys {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   color: var(--n-text-color-2);
+  white-space: nowrap;
 }
 
 .shortcut-help-label {

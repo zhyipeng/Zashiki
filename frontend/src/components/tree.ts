@@ -81,6 +81,11 @@ export function getFirstLeafId(node: TreeNode): number {
   return getFirstLeafId(node.children[0])
 }
 
+export function getLeafIds(node: TreeNode): number[] {
+  if (isLeaf(node)) return [node.id]
+  return [...getLeafIds(node.children[0]), ...getLeafIds(node.children[1])]
+}
+
 export function findLeafById(
   node: TreeNode,
   id: number,
