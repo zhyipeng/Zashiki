@@ -1,22 +1,26 @@
 <script setup lang="ts">
 import { computed, h, ref, watch } from 'vue'
-import { NTree, NDivider, NText, NSplit, NIcon } from 'naive-ui'
+import { NTree, NDivider, NText, NSplit, NIcon, useMessage } from 'naive-ui'
 import type { TreeOption } from 'naive-ui'
-import { FolderOutlined } from '@vicons/material'
+import { DeleteOutlined, FolderOutlined } from '@vicons/material'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { useSettings } from '../composables/useSettings'
 import { useDirectoryChangeListener } from '../composables/useDirectoryEvents'
 import { ancestorPaths, joinPath, pathRoot } from './path'
 
 type RootInfo = { name: string, path: string, freeSpace: number, totalSpace: number }
+type TrashInfo = { label: string, path: string, available: boolean }
+type QuickAccessItem = { label: string, path: string, isTrash?: boolean }
 
 const { settings } = useSettings()
+const message = useMessage()
 
 const props = defineProps<{
   currentPath: string
   homeDir: string
   separator: string
   roots: RootInfo[]
+  trashInfo: TrashInfo
 }>()
 
 const emit = defineEmits<{
@@ -150,13 +154,31 @@ function onUpdateSelectedKeys(keys: string[]) {
 const quickAccess = computed(() => {
   const h = props.homeDir
   if (!h) return []
-  return [
+  const items: QuickAccessItem[] = [
     { label: 'Home', path: h },
     { label: 'Desktop', path: joinPath(h, 'Desktop', props.separator) },
     { label: 'Documents', path: joinPath(h, 'Documents', props.separator) },
     { label: 'Downloads', path: joinPath(h, 'Downloads', props.separator) },
   ]
+  if (props.trashInfo.available) {
+    items.push({ label: props.trashInfo.label || '回收站', path: props.trashInfo.path, isTrash: true })
+  }
+  return items
 })
+
+async function onQuickAccessClick(item: QuickAccessItem) {
+  if (item.path) {
+    emit('navigate', item.path)
+    return
+  }
+  if (item.isTrash) {
+    try {
+      await FileService.OpenTrash()
+    } catch (err) {
+      message.error(`打开${item.label}失败：${err}`)
+    }
+  }
+}
 </script>
 
 <template>
@@ -164,7 +186,7 @@ const quickAccess = computed(() => {
     <NSplit
       class="sidebar-split"
       direction="vertical"
-      :default-size="'170px'"
+      :default-size="'200px'"
       :min="'80px'"
       :max="'300px'"
       :resize-trigger-size="3"
@@ -174,13 +196,13 @@ const quickAccess = computed(() => {
           <NText depth="3" class="section-title">快速访问</NText>
           <div
             v-for="item in quickAccess"
-            :key="item.path"
+            :key="item.isTrash ? 'trash' : item.path"
             class="quick-item"
-            :class="{ active: currentPath === item.path }"
-            @click="emit('navigate', item.path)"
+            :class="{ active: item.path && currentPath === item.path }"
+            @click="onQuickAccessClick(item)"
           >
             <NIcon class="quick-icon" :size="16" color="#D99A22">
-              <FolderOutlined/>
+              <component :is="item.isTrash ? DeleteOutlined : FolderOutlined"/>
             </NIcon>
             <span class="quick-label">{{ item.label }}</span>
           </div>

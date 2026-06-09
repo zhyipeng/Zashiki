@@ -50,6 +50,7 @@ const props = defineProps<{
   focused?: boolean
   separator: string
   homeDir: string
+  trashLabel?: string
 }>()
 
 function loadDir(p: string) {
@@ -117,6 +118,7 @@ const selectedRowKeys = ref<string[]>([])
 const currentRowKey = ref('')
 const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 const sortState = ref<DataTableSortState | null>(null)
+const trashLabel = computed(() => props.trashLabel || '回收站')
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
 type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete'
 
@@ -154,6 +156,7 @@ const deleteConfirmModal = ref({
   show: false,
   entries: [] as FileEntry[],
   fallbackIndex: -1,
+  permanent: false,
 })
 const shortcutHelpModal = ref(false)
 
@@ -737,6 +740,12 @@ function deleteCurrentEntries() {
   openDeleteConfirmModal(entries)
 }
 
+function permanentlyDeleteCurrentEntries() {
+  const entries = fileOperationEntriesForCurrent()
+  if (entries.length === 0) return
+  openDeleteConfirmModal(entries, true)
+}
+
 function renameCurrentEntry() {
   const entry = currentEntry()
   if (!entry || isParentEntry(entry)) return
@@ -891,7 +900,7 @@ function renameSelectionEnd(entry: FileEntry): number {
   return dotIndex
 }
 
-function openDeleteConfirmModal(entries: FileEntry[]) {
+function openDeleteConfirmModal(entries: FileEntry[], permanent = false) {
   const deletePathSet = new Set(entries.map(entry => entry.path))
   const fallbackIndex = visibleEntries.value
     .filter(entry => !isParentEntry(entry))
@@ -900,6 +909,7 @@ function openDeleteConfirmModal(entries: FileEntry[]) {
     show: true,
     entries,
     fallbackIndex,
+    permanent,
   }
 }
 
@@ -908,10 +918,13 @@ function closeDeleteConfirmModal() {
 }
 
 async function confirmDeleteEntry() {
-  const { entries, fallbackIndex } = deleteConfirmModal.value
+  const { entries, fallbackIndex, permanent } = deleteConfirmModal.value
   if (entries.length === 0) return
   try {
-    const deletedPaths = await FileService.DeleteEntries(entries.map(entry => entry.path))
+    const paths = entries.map(entry => entry.path)
+    const deletedPaths = permanent
+      ? await FileService.DeleteEntries(paths)
+      : await FileService.TrashEntries(paths)
     closeDeleteConfirmModal()
     removeEntries(deletedPaths, fallbackIndex)
     notifyDirectoriesChanged([props.path], { exclude: directoryEventToken })
@@ -1054,7 +1067,8 @@ const shortcutActions: ShortcutAction[] = [
   { id: 'rename', label: '重命名当前项', keys: [{ key: 'f2' }, { key: 'r' }], run: () => renameCurrentEntry() },
   { id: 'select-first', label: '选择第一项', keys: [[{ key: 'g' }, { key: 'g' }]], run: () => selectFirstEntry() },
   { id: 'select-last', label: '选择最后一项', keys: [{ key: 'g', shift: true }], run: () => selectLastEntry() },
-  { id: 'delete', label: '删除当前项', keys: [{ key: 'd' }, { key: 'delete' }], run: () => deleteCurrentEntries() },
+  { id: 'delete', label: `移到${trashLabel.value}`, keys: [{ key: 'd' }, { key: 'delete' }], run: () => deleteCurrentEntries() },
+  { id: 'permanent-delete', label: '永久删除当前项', keys: [{ key: 'd', shift: true }, { key: 'delete', shift: true }], run: () => permanentlyDeleteCurrentEntries() },
   { id: 'confirm', label: '确认当前弹窗', keys: [{ key: 'enter' }], run: () => handleEnterShortcut(), allowInEditable: true, disabled: () => !deleteConfirmModal.value.show && !renameModal.value.show },
   { id: 'focus-path', label: '聚焦路径栏', keys: [{ key: 'o' }], run: () => focusPathInput() },
   { id: 'refresh', label: '刷新', keys: [{ key: 'r', ctrlOrMeta: true }], run: () => refresh() },
@@ -1316,21 +1330,23 @@ useKeyboardShortcuts(() => shortcutActions, {
     <NModal
       v-model:show="deleteConfirmModal.show"
       preset="card"
-      title="确认删除"
+      :title="deleteConfirmModal.permanent ? '确认永久删除' : `确认移到${trashLabel}`"
       style="width: 360px"
     >
       <div class="modal-body">
         <template v-if="deleteConfirmModal.entries.length === 1">
-          确定删除「{{ deleteConfirmModal.entries[0]?.name }}」吗？
+          确定{{ deleteConfirmModal.permanent ? '永久删除' : `移到${trashLabel}` }}「{{ deleteConfirmModal.entries[0]?.name }}」吗？
         </template>
         <template v-else>
-          确定删除选中的 {{ deleteConfirmModal.entries.length }} 项吗？
+          确定{{ deleteConfirmModal.permanent ? '永久删除' : `移到${trashLabel}` }}选中的 {{ deleteConfirmModal.entries.length }} 项吗？
         </template>
       </div>
       <template #footer>
         <NSpace justify="end">
           <NButton @click="closeDeleteConfirmModal">取消</NButton>
-          <NButton type="error" @click="confirmDeleteEntry">删除</NButton>
+          <NButton type="error" @click="confirmDeleteEntry">
+            {{ deleteConfirmModal.permanent ? '永久删除' : `移到${trashLabel}` }}
+          </NButton>
         </NSpace>
       </template>
     </NModal>

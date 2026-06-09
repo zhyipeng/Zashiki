@@ -8,5 +8,6 @@ export {
 
 export {
     FileEntry,
-    RootEntry
+    RootEntry,
+    TrashInfo
 } from "./models.js";

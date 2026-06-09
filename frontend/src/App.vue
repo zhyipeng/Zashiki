@@ -15,6 +15,7 @@ const currentPath = ref('')
 const homeDir = ref('')
 const separator = ref('/')
 const roots = ref<{ name: string, path: string, freeSpace: number, totalSpace: number }[]>([])
+const trashInfo = ref<{ label: string, path: string, available: boolean }>({ label: '', path: '', available: false })
 const loading = ref(true)
 const error = ref('')
 
@@ -25,14 +26,16 @@ const focusedId = ref(1)
 onMounted(async () => {
   window.addEventListener('keydown', onGlobalKeydown)
   try {
-    const [home, sep, rootDirs] = await Promise.all([
+    const [home, sep, rootDirs, trash] = await Promise.all([
       FileService.GetHomeDir(),
       FileService.GetSeparator(),
       FileService.GetRoots(),
+      FileService.GetTrashInfo(),
     ])
     homeDir.value = home
     separator.value = sep || '/'
     roots.value = rootDirs || []
+    trashInfo.value = trash || { label: '', path: '', available: false }
     currentPath.value = homeDir.value
   } catch (err) {
     console.error('GetHomeDir failed:', err)
@@ -165,6 +168,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
                 :homeDir="homeDir"
                 :separator="separator"
                 :roots="roots"
+                :trash-info="trashInfo"
                 @navigate="onNavigate"
             />
           </template>
@@ -176,6 +180,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
                   :closable="false"
                   :separator="separator"
                   :home-dir="homeDir"
+                  :trash-label="trashInfo.label || '回收站'"
                   @navigate="handleNavigate"
                   @split="handleSplit"
                   @close="handleClose"

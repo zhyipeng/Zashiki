@@ -10,6 +10,7 @@ defineProps<{
   closable: boolean
   separator: string
   homeDir: string
+  trashLabel: string
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +44,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
         :focused="node.id === focusedId"
         :separator="separator"
         :home-dir="homeDir"
+        :trash-label="trashLabel"
         @navigate="(path: string) => emit('navigate', node.id, path)"
         @split-h="emit('split', node.id, 'horizontal')"
         @split-v="emit('split', node.id, 'vertical')"
@@ -66,6 +68,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           :closable="true"
           :separator="separator"
           :home-dir="homeDir"
+          :trash-label="trashLabel"
           @navigate="(id, path) => emit('navigate', id, path)"
           @split="(id, dir) => emit('split', id, dir)"
           @close="(id) => emit('close', id)"
@@ -81,6 +84,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           :closable="true"
           :separator="separator"
           :home-dir="homeDir"
+          :trash-label="trashLabel"
           @navigate="(id, path) => emit('navigate', id, path)"
           @split="(id, dir) => emit('split', id, dir)"
           @close="(id) => emit('close', id)"

@@ -94,3 +94,32 @@ export class RootEntry {
         return new RootEntry($$parsedSource as Partial<RootEntry>);
     }
 }
+
+export class TrashInfo {
+    "label": string;
+    "path": string;
+    "available": boolean;
+
+    /** Creates a new TrashInfo instance. */
+    constructor($$source: Partial<TrashInfo> = {}) {
+        if (!("label" in $$source)) {
+            this["label"] = "";
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("available" in $$source)) {
+            this["available"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TrashInfo instance from a string or object.
+     */
+    static createFrom($$source: any = {}): TrashInfo {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TrashInfo($$parsedSource as Partial<TrashInfo>);
+    }
+}
