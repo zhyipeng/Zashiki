@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import {ref, onMounted, onUnmounted, watch} from 'vue'
-import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider, NFlex, NButton, NIcon} from 'naive-ui'
+import {computed, ref, onMounted, onUnmounted, watch} from 'vue'
+import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider, NFlex, NButton, NIcon, darkTheme} from 'naive-ui'
 import Sidebar from './components/Sidebar.vue'
 import SplitNode from './components/SplitNode.vue'
 import {createLeaf, splitLeaf, closeLeaf, keepOnlyLeaf, navigateLeaf, getFirstLeafId, getLeafIds, findLeafById} from './components/tree'
@@ -8,8 +8,11 @@ import type {TreeNode} from './components/tree'
 import {FileService} from '../bindings/zashiki/internal/filemanager'
 import { Settings28Regular } from '@vicons/fluent'
 import SettingsModal from './components/SettingsModal.vue'
+import { useTheme } from './composables/useTheme'
 
 const showSettings = ref(false)
+const { isDarkTheme, mountTheme } = useTheme()
+const naiveTheme = computed(() => isDarkTheme.value ? darkTheme : null)
 
 const currentPath = ref('')
 const homeDir = ref('')
@@ -22,8 +25,10 @@ const error = ref('')
 let nextId = 1
 const rootNode = ref<TreeNode>(createLeaf(nextId++, ''))
 const focusedId = ref(1)
+let cleanupTheme: (() => void) | null = null
 
 onMounted(async () => {
+  cleanupTheme = mountTheme()
   window.addEventListener('keydown', onGlobalKeydown)
   try {
     const [home, sep, rootDirs, trash] = await Promise.all([
@@ -48,6 +53,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
+  cleanupTheme?.()
+  cleanupTheme = null
 })
 
 // sidebar → focused panel
@@ -140,7 +147,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 </script>
 
 <template>
-  <NConfigProvider>
+  <NConfigProvider :theme="naiveTheme">
     <NMessageProvider>
       <div v-if="loading" class="app-loading">
         <NSpin/>
@@ -206,7 +213,19 @@ html, body, #app {
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
-  background: rgb(255, 255, 255);
+  background: var(--app-background);
+}
+
+:root {
+  --app-background: #ffffff;
+  --sidebar-root-used-color: #E7F5EE;
+  --sidebar-root-space-color: var(--n-text-color-3);
+}
+
+:root[data-theme="dark"] {
+  --app-background: #101014;
+  --sidebar-root-used-color: #2f5a46;
+  --sidebar-root-space-color: #d9e7de;
 }
 
 .app-layout {

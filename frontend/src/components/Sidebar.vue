@@ -302,8 +302,8 @@ async function onQuickAccessClick(item: QuickAccessItem) {
   background:
     linear-gradient(
       to right,
-      #E7F5EE 0,
-      #E7F5EE var(--used-percent),
+      var(--sidebar-root-used-color) 0,
+      var(--sidebar-root-used-color) var(--used-percent),
       transparent var(--used-percent),
       transparent 100%
     );
@@ -321,7 +321,7 @@ async function onQuickAccessClick(item: QuickAccessItem) {
 
 :deep(.root-space) {
   flex-shrink: 0;
-  color: var(--n-text-color-3);
+  color: var(--sidebar-root-space-color);
   font-size: 8px;
   line-height: 18px;
   white-space: nowrap;

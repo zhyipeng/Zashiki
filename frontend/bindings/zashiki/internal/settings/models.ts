@@ -7,11 +7,15 @@ import { Create as $Create } from "@wailsio/runtime";
 
 export class Settings {
     "showHiddenFiles": boolean;
+    "themeMode": string;
 
     /** Creates a new Settings instance. */
     constructor($$source: Partial<Settings> = {}) {
         if (!("showHiddenFiles" in $$source)) {
             this["showHiddenFiles"] = false;
+        }
+        if (!("themeMode" in $$source)) {
+            this["themeMode"] = "";
         }
 
         Object.assign(this, $$source);

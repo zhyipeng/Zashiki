@@ -10,7 +10,8 @@ import (
 )
 
 type Settings struct {
-	ShowHiddenFiles bool `json:"showHiddenFiles"`
+	ShowHiddenFiles bool   `json:"showHiddenFiles"`
+	ThemeMode       string `json:"themeMode"`
 }
 
 type SettingsService struct {
@@ -53,14 +54,17 @@ func (s *SettingsService) GetSettings() (Settings, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Settings{}, nil
+			return defaultSettings(), nil
 		}
 		return Settings{}, err
 	}
 
-	var settings Settings
+	settings := defaultSettings()
 	if err := json.Unmarshal(data, &settings); err != nil {
-		return Settings{}, nil
+		return defaultSettings(), nil
+	}
+	if !isValidThemeMode(settings.ThemeMode) {
+		settings.ThemeMode = defaultSettings().ThemeMode
 	}
 	return settings, nil
 }
@@ -80,4 +84,12 @@ func (s *SettingsService) SaveSettings(settings Settings) error {
 	}
 
 	return os.WriteFile(path, data, 0o644)
+}
+
+func defaultSettings() Settings {
+	return Settings{ThemeMode: "system"}
+}
+
+func isValidThemeMode(mode string) bool {
+	return mode == "light" || mode == "dark" || mode == "system"
 }

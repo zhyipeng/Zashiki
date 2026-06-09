@@ -1,12 +1,16 @@
 import { reactive, ref } from 'vue'
 import { SettingsService } from '../../bindings/zashiki/internal/settings'
 
+export type ThemeMode = 'light' | 'dark' | 'system'
+
 export interface Settings {
   showHiddenFiles: boolean
+  themeMode: ThemeMode
 }
 
 const state = reactive<Settings>({
   showHiddenFiles: false,
+  themeMode: 'system',
 })
 
 const loaded = ref(false)
@@ -17,6 +21,7 @@ export function initSettings(): Promise<void> {
 
   initPromise = SettingsService.GetSettings().then((settings) => {
     state.showHiddenFiles = settings.showHiddenFiles
+    state.themeMode = normalizeThemeMode(settings.themeMode)
     loaded.value = true
   }).catch((err) => {
     console.error('Failed to load settings:', err)
@@ -26,8 +31,12 @@ export function initSettings(): Promise<void> {
   return initPromise
 }
 
+function normalizeThemeMode(value: unknown): ThemeMode {
+  return value === 'light' || value === 'dark' || value === 'system' ? value : 'system'
+}
+
 function persist() {
-  SettingsService.SaveSettings({ ...state } as any).catch((err) => {
+  SettingsService.SaveSettings({ ...state }).catch((err) => {
     console.error('Failed to save settings:', err)
   })
 }

@@ -21,11 +21,14 @@ func TestSettingsService_GetSettings_Default(t *testing.T) {
 	if settings.ShowHiddenFiles {
 		t.Error("expected ShowHiddenFiles to default to false")
 	}
+	if settings.ThemeMode != "system" {
+		t.Errorf("expected ThemeMode=system by default, got %q", settings.ThemeMode)
+	}
 }
 
 func TestSettingsService_SaveAndGet(t *testing.T) {
 	svc := newTestService(t)
-	original := Settings{ShowHiddenFiles: true}
+	original := Settings{ShowHiddenFiles: true, ThemeMode: "dark"}
 	if err := svc.SaveSettings(original); err != nil {
 		t.Fatalf("SaveSettings() failed: %v", err)
 	}
@@ -36,6 +39,9 @@ func TestSettingsService_SaveAndGet(t *testing.T) {
 	}
 	if loaded.ShowHiddenFiles != true {
 		t.Errorf("expected ShowHiddenFiles=true, got %v", loaded.ShowHiddenFiles)
+	}
+	if loaded.ThemeMode != "dark" {
+		t.Errorf("expected ThemeMode=dark, got %q", loaded.ThemeMode)
 	}
 }
 
@@ -94,6 +100,32 @@ func TestSettingsService_CorruptedFile(t *testing.T) {
 	}
 	if settings.ShowHiddenFiles {
 		t.Error("expected default ShowHiddenFiles=false for corrupted config file")
+	}
+	if settings.ThemeMode != "system" {
+		t.Errorf("expected default ThemeMode=system for corrupted config file, got %q", settings.ThemeMode)
+	}
+}
+
+func TestSettingsService_InvalidThemeMode(t *testing.T) {
+	svc := newTestService(t)
+	path, err := svc.configPath()
+	if err != nil {
+		t.Fatalf("configPath() failed: %v", err)
+	}
+
+	if err := os.WriteFile(path, []byte(`{"showHiddenFiles":true,"themeMode":"unknown"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	settings, err := svc.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings() failed: %v", err)
+	}
+	if settings.ThemeMode != "system" {
+		t.Errorf("expected invalid ThemeMode to fallback to system, got %q", settings.ThemeMode)
+	}
+	if !settings.ShowHiddenFiles {
+		t.Error("expected ShowHiddenFiles to be preserved")
 	}
 }
 
