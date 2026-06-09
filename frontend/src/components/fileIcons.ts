@@ -128,6 +128,18 @@ export function resolveFileIcon(entry: FileEntry): ResolvedFileIcon {
   return { ...fallbackFileIcons.binary, source: 'binary' }
 }
 
+export function fileTypeLabel(entry: FileEntry): string {
+  if (entry.isDir) return '目录'
+  if (entry.isExecutable) return '可执行'
+  if (entry.isSymlink) return '链接'
+
+  const extension = fileExtension(entry.name)
+  if (imageExtensions.has(extension)) return '图片'
+  if (textExtensions.has(extension)) return '文本'
+  if (extension) return extension.slice(1).toUpperCase()
+  return '文件'
+}
+
 export function fileExtension(name: string): string {
   const index = name.lastIndexOf('.')
   if (index <= 0 || index === name.length - 1) return ''

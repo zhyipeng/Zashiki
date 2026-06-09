@@ -11,7 +11,7 @@ import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
 import { useFileClipboard } from '../composables/useFileClipboard'
 import DropConfirmModal from './DropConfirmModal.vue'
-import { resolveFileIcon } from './fileIcons'
+import { fileTypeLabel, resolveFileIcon } from './fileIcons'
 import { parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
@@ -287,6 +287,16 @@ function formatTime(t: unknown): string {
   }
 }
 
+function compareText(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+function compareTime(a: unknown, b: unknown): number {
+  const left = a ? new Date(a as string).getTime() : 0
+  const right = b ? new Date(b as string).getTime() : 0
+  return left - right
+}
+
 function goBack() {
   if (!canGoBack.value) return
   historyIndex.value--
@@ -327,6 +337,7 @@ const baseColumns: DataTableColumns<FileEntry> = [
   {
     title: 'Name',
     key: 'name',
+    sorter: (row1, row2) => compareText(row1.name, row2.name),
     render(row) {
       const fileIcon = resolveFileIcon(row)
       return h('div', { class: 'file-name-cell' }, [
@@ -341,9 +352,19 @@ const baseColumns: DataTableColumns<FileEntry> = [
     },
   },
   {
+    title: 'Type',
+    key: 'type',
+    width: '110px',
+    sorter: (row1, row2) => compareText(fileTypeLabel(row1), fileTypeLabel(row2)),
+    render(row) {
+      return fileTypeLabel(row)
+    },
+  },
+  {
     title: 'Size',
     key: 'size',
     width: '85px',
+    sorter: (row1, row2) => row1.size - row2.size,
     render(row) {
       return row.isDir ? '-' : formatSize(row.size)
     },
@@ -352,6 +373,7 @@ const baseColumns: DataTableColumns<FileEntry> = [
     title: 'Modified',
     key: 'modTime',
     width: '165px',
+    sorter: (row1, row2) => compareTime(row1.modTime, row2.modTime),
     render(row) {
       return formatTime(row.modTime)
     },
