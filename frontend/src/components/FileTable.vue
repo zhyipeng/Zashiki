@@ -536,6 +536,11 @@ function focusPathInput() {
   pathInputRef.value?.focus()
 }
 
+function blurPathInput() {
+  pathInputRef.value?.blur()
+  focusFileTable()
+}
+
 function focusFileTable() {
   fileTableRef.value?.focus({ preventScroll: true })
 }
@@ -1232,6 +1237,7 @@ useKeyboardShortcuts(() => shortcutActions, {
           clearable
           @update:value="onPathInput"
           @keyup.enter="onPathSubmit"
+          @keydown.esc.stop.prevent="blurPathInput"
         />
         <NButton
           text
