@@ -107,6 +107,7 @@ function handleFocus(leafId: number, path: string) {
         </n-flex>
         <NDivider style="margin: 0" />
         <NSplit
+            class="app-main-split"
             direction="horizontal"
             :default-size="'180px'"
             :min="'40px'"
@@ -161,6 +162,9 @@ html, body, #app {
 .app-layout {
   width: 100vw;
   height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .app-loading {
@@ -182,5 +186,12 @@ html, body, #app {
 .app-header {
   height: 40px;
   padding: 0 15px;
+  flex-shrink: 0;
+}
+
+.app-main-split {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 </style>
