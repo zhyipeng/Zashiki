@@ -907,15 +907,16 @@ const shortcutActions: ShortcutAction[] = [
   { id: 'toggle-multi-select', label: '切换多选模式', keys: [{ key: 'm' }], run: () => toggleMultiSelectMode() },
   { id: 'toggle-current-selection', label: '切换当前项选择', keys: [{ key: 'space' }], run: () => toggleCurrentEntrySelection(), disabled: () => !multiSelectMode.value },
   { id: 'help', label: '显示热键速查表', keys: [{ key: '?', shift: true }], run: () => { shortcutHelpModal.value = true } },
-  { id: 'copy', label: '复制当前项', keys: [{ key: 'y' }], run: () => copyCurrentEntries() },
-  { id: 'paste', label: '粘贴到当前目录', keys: [{ key: 'p' }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
-  { id: 'cut', label: '剪切当前项', keys: [{ key: 'x' }], run: () => cutCurrentEntries() },
+  { id: 'copy', label: '复制当前项', keys: [{ key: 'y' }, { key: 'c', ctrlOrMeta: true }], run: () => copyCurrentEntries() },
+  { id: 'paste', label: '粘贴到当前目录', keys: [{ key: 'p' }, { key: 'v', ctrlOrMeta: true }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
+  { id: 'cut', label: '剪切当前项', keys: [{ key: 'x' }, { key: 'x', ctrlOrMeta: true }], run: () => cutCurrentEntries() },
   { id: 'select-first', label: '选择第一项', keys: [[{ key: 'g' }, { key: 'g' }]], run: () => selectFirstEntry() },
   { id: 'select-last', label: '选择最后一项', keys: [{ key: 'g', shift: true }], run: () => selectLastEntry() },
-  { id: 'delete', label: '删除当前项', keys: [{ key: 'd' }], run: () => deleteCurrentEntries() },
+  { id: 'delete', label: '删除当前项', keys: [{ key: 'd' }, { key: 'delete' }], run: () => deleteCurrentEntries() },
   { id: 'confirm', label: '确认当前弹窗', keys: [{ key: 'enter' }], run: () => handleEnterShortcut(), allowInEditable: true, disabled: () => !deleteConfirmModal.value.show },
   { id: 'focus-path', label: '聚焦路径栏', keys: [{ key: 'o' }], run: () => focusPathInput() },
-  { id: 'refresh', label: '刷新', keys: [{ key: 'r' }], run: () => refresh() },
+  { id: 'split-vertical', label: '竖直分屏', keys: [{ key: 'd', ctrlOrMeta: true }], run: () => emit('splitV') },
+  { id: 'split-horizontal', label: '水平分屏', keys: [{ key: 'd', ctrlOrMeta: true, shift: true }], run: () => emit('splitH') },
 ]
 
 const shortcutHelpRows = computed(() => shortcutActions.map(action => ({
