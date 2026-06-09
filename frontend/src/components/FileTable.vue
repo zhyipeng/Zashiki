@@ -98,6 +98,7 @@ const emit = defineEmits<{
   splitH: []
   splitV: []
   close: []
+  closeOthers: []
   focusNext: []
 }>()
 
@@ -933,6 +934,7 @@ const shortcutActions: ShortcutAction[] = [
   { id: 'split-vertical', label: '竖直分屏', keys: [{ key: 'd', ctrlOrMeta: true }], run: () => emit('splitV') },
   { id: 'split-horizontal', label: '水平分屏', keys: [{ key: 'd', ctrlOrMeta: true, shift: true }], run: () => emit('splitH') },
   { id: 'close-panel', label: '关闭当前面板', keys: [{ key: 'w', ctrlOrMeta: true }], run: () => emit('close'), disabled: () => !props.closable },
+  { id: 'close-other-panels', label: '关闭其它面板', keys: [{ key: 'w', ctrlOrMeta: true, shift: true }], run: () => emit('closeOthers'), disabled: () => !props.closable },
   { id: 'focus-next-panel', label: '切换到下一个面板', keys: [{ key: 'tab' }], run: () => {}, disabled: () => true },
 ]
 

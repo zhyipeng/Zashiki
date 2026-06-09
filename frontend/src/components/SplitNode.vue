@@ -16,6 +16,7 @@ const emit = defineEmits<{
   navigate: [id: number, path: string]
   split: [id: number, direction: 'horizontal' | 'vertical']
   close: [id: number]
+  closeOthers: [id: number]
   focus: [id: number, path: string]
   focusNext: [id: number]
 }>()
@@ -46,6 +47,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
         @split-h="emit('split', node.id, 'horizontal')"
         @split-v="emit('split', node.id, 'vertical')"
         @close="emit('close', node.id)"
+        @close-others="emit('closeOthers', node.id)"
         @focus-next="emit('focusNext', node.id)"
       />
     </div>
@@ -67,6 +69,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           @navigate="(id, path) => emit('navigate', id, path)"
           @split="(id, dir) => emit('split', id, dir)"
           @close="(id) => emit('close', id)"
+          @close-others="(id) => emit('closeOthers', id)"
           @focus="(id, path) => emit('focus', id, path)"
           @focus-next="(id) => emit('focusNext', id)"
         />
@@ -81,6 +84,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           @navigate="(id, path) => emit('navigate', id, path)"
           @split="(id, dir) => emit('split', id, dir)"
           @close="(id) => emit('close', id)"
+          @close-others="(id) => emit('closeOthers', id)"
           @focus="(id, path) => emit('focus', id, path)"
           @focus-next="(id) => emit('focusNext', id)"
         />

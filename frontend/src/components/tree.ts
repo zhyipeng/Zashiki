@@ -59,6 +59,13 @@ export function closeLeaf(root: TreeNode, leafId: number): TreeNode | null {
   return { ...root, children: surviving as [TreeNode, TreeNode] }
 }
 
+export function keepOnlyLeaf(root: TreeNode, leafId: number): TreeNode | null {
+  if (isLeaf(root)) {
+    return root.id === leafId ? root : null
+  }
+  return keepOnlyLeaf(root.children[0], leafId) || keepOnlyLeaf(root.children[1], leafId)
+}
+
 export function navigateLeaf(
   root: TreeNode,
   leafId: number,

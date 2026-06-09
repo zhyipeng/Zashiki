@@ -3,7 +3,7 @@ import {ref, onMounted, onUnmounted, watch} from 'vue'
 import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider, NFlex, NButton, NIcon} from 'naive-ui'
 import Sidebar from './components/Sidebar.vue'
 import SplitNode from './components/SplitNode.vue'
-import {createLeaf, splitLeaf, closeLeaf, navigateLeaf, getFirstLeafId, getLeafIds, findLeafById} from './components/tree'
+import {createLeaf, splitLeaf, closeLeaf, keepOnlyLeaf, navigateLeaf, getFirstLeafId, getLeafIds, findLeafById} from './components/tree'
 import type {TreeNode} from './components/tree'
 import {FileService} from '../bindings/zashiki/internal/filemanager'
 import { Settings28Regular } from '@vicons/fluent'
@@ -95,6 +95,15 @@ function handleClose(leafId: number) {
   }
 }
 
+function handleCloseOthers(leafId: number) {
+  const newRoot = keepOnlyLeaf(rootNode.value, leafId)
+  if (!newRoot) return
+  rootNode.value = newRoot
+  focusedId.value = leafId
+  const leaf = findLeafById(rootNode.value, leafId)
+  if (leaf) currentPath.value = leaf.path
+}
+
 function handleFocus(leafId: number, path: string) {
   if (focusedId.value === leafId) return
   focusedId.value = leafId
@@ -170,6 +179,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
                   @navigate="handleNavigate"
                   @split="handleSplit"
                   @close="handleClose"
+                  @close-others="handleCloseOthers"
                   @focus="handleFocus"
                   @focus-next="handleFocusNextPanel"
               />
