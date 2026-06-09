@@ -5,7 +5,7 @@ let activeFileTableShortcutScopeId = 0
 
 <script setup lang="ts">
 import { ref, watch, computed, h, nextTick, onMounted } from 'vue'
-import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NAutoComplete, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
+import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NAutoComplete, NDropdown, NModal, NSpace, NTag, useMessage } from 'naive-ui'
 import type { AutoCompleteInst, AutoCompleteOption, DataTableColumns, DataTableInst, DataTableSortState, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
@@ -438,6 +438,8 @@ type PinyinFn = typeof import('pinyin-pro')['pinyin']
 let pinyinFn: PinyinFn | null = null
 let pinyinLoadPromise: Promise<void> | null = null
 const pinyinReady = ref(false)
+type ShortcutCategory = 'navigation' | 'file' | 'selection' | 'search' | 'panel' | 'dialog'
+type CategorizedShortcutAction = ShortcutAction & { category: ShortcutCategory }
 
 function onPathSubmit() {
   const trimmed = pathInput.value.trim()
@@ -1130,39 +1132,59 @@ async function handleEnterShortcut() {
   }
 }
 
-const shortcutActions: ShortcutAction[] = [
-  { id: 'select-next', label: '选择下一项', keys: [{ key: 'j' }], run: () => selectEntryByOffset(1) },
-  { id: 'select-prev', label: '选择上一项', keys: [{ key: 'k' }], run: () => selectEntryByOffset(-1) },
-  { id: 'go-up', label: '返回上级目录', keys: [{ key: 'h' }], run: () => goUp(), disabled: () => !canGoUp.value },
-  { id: 'open', label: '打开当前项', keys: [{ key: 'l' }], run: () => openCurrentEntry() },
-  { id: 'toggle-search', label: '切换搜索栏', keys: [{ key: '/' }, { key: 'f', ctrlOrMeta: true, allowInEditable: true }], run: () => toggleSearch() },
-  { id: 'escape', label: '退出搜索/多选/弹窗', keys: [{ key: 'escape' }], run: () => handleEscapeShortcut(), allowInEditable: true },
-  { id: 'toggle-multi-select', label: '切换多选模式', keys: [{ key: 'm' }], run: () => toggleMultiSelectMode() },
-  { id: 'toggle-current-selection', label: '切换当前项选择', keys: [{ key: 'space' }], run: () => toggleCurrentEntrySelection(), disabled: () => !multiSelectMode.value },
-  { id: 'help', label: '显示热键速查表', keys: [{ key: '?', shift: true }], run: () => { shortcutHelpModal.value = true } },
-  { id: 'copy', label: '复制当前项', keys: [{ key: 'y' }, { key: 'c', ctrlOrMeta: true }], run: () => copyCurrentEntries() },
-  { id: 'paste', label: '粘贴到当前目录', keys: [{ key: 'p' }, { key: 'v', ctrlOrMeta: true }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
-  { id: 'cut', label: '剪切当前项', keys: [{ key: 'x' }, { key: 'x', ctrlOrMeta: true }], run: () => cutCurrentEntries() },
-  { id: 'rename', label: '重命名当前项', keys: [{ key: 'f2' }, { key: 'r' }], run: () => renameCurrentEntry() },
-  { id: 'select-first', label: '选择第一项', keys: [[{ key: 'g' }, { key: 'g' }]], run: () => selectFirstEntry() },
-  { id: 'select-last', label: '选择最后一项', keys: [{ key: 'g', shift: true }], run: () => selectLastEntry() },
-  { id: 'delete', label: `移到${trashLabel.value}`, keys: [{ key: 'd' }, { key: 'delete' }], run: () => deleteCurrentEntries() },
-  { id: 'permanent-delete', label: '永久删除当前项', keys: [{ key: 'd', shift: true }, { key: 'delete', shift: true }], run: () => permanentlyDeleteCurrentEntries() },
-  { id: 'confirm', label: '确认当前弹窗', keys: [{ key: 'enter' }], run: () => handleEnterShortcut(), allowInEditable: true, disabled: () => !deleteConfirmModal.value.show && !renameModal.value.show },
-  { id: 'focus-path', label: '聚焦路径栏', keys: [{ key: 'o' }, { key: 'l', ctrlOrMeta: true }], run: () => focusPathInput() },
-  { id: 'refresh', label: '刷新', keys: [{ key: 'r', ctrlOrMeta: true }], run: () => refresh() },
-  { id: 'split-vertical', label: '竖直分屏', keys: [{ key: 'd', ctrlOrMeta: true }], run: () => emit('splitV') },
-  { id: 'split-horizontal', label: '水平分屏', keys: [{ key: 'd', ctrlOrMeta: true, shift: true }], run: () => emit('splitH') },
-  { id: 'close-panel', label: '关闭当前面板', keys: [{ key: 'w', ctrlOrMeta: true }], run: () => emit('close'), disabled: () => !props.closable },
-  { id: 'close-other-panels', label: '关闭其它面板', keys: [{ key: 'w', ctrlOrMeta: true, shift: true }], run: () => emit('closeOthers'), disabled: () => !props.closable },
-  { id: 'focus-next-panel', label: '切换到下一个面板', keys: [{ key: 'tab' }], run: () => {}, disabled: () => true },
+const shortcutActions: CategorizedShortcutAction[] = [
+  { id: 'select-next', category: 'selection', label: '选择下一项', keys: [{ key: 'j' }], run: () => selectEntryByOffset(1) },
+  { id: 'select-prev', category: 'selection', label: '选择上一项', keys: [{ key: 'k' }], run: () => selectEntryByOffset(-1) },
+  { id: 'go-up', category: 'navigation', label: '返回上级目录', keys: [{ key: 'h' }], run: () => goUp(), disabled: () => !canGoUp.value },
+  { id: 'open', category: 'file', label: '打开当前项', keys: [{ key: 'l' }], run: () => openCurrentEntry() },
+  { id: 'toggle-search', category: 'search', label: '切换搜索栏', keys: [{ key: '/' }, { key: 'f', ctrlOrMeta: true, allowInEditable: true }], run: () => toggleSearch() },
+  { id: 'escape', category: 'dialog', label: '退出搜索/多选/弹窗', keys: [{ key: 'escape' }], run: () => handleEscapeShortcut(), allowInEditable: true },
+  { id: 'toggle-multi-select', category: 'selection', label: '切换多选模式', keys: [{ key: 'm' }], run: () => toggleMultiSelectMode() },
+  { id: 'toggle-current-selection', category: 'selection', label: '切换当前项选择', keys: [{ key: 'space' }], run: () => toggleCurrentEntrySelection(), disabled: () => !multiSelectMode.value },
+  { id: 'help', category: 'dialog', label: '显示热键速查表', keys: [{ key: '?', shift: true }], run: () => { shortcutHelpModal.value = true } },
+  { id: 'copy', category: 'file', label: '复制当前项', keys: [{ key: 'y' }, { key: 'c', ctrlOrMeta: true }], run: () => copyCurrentEntries() },
+  { id: 'paste', category: 'file', label: '粘贴到当前目录', keys: [{ key: 'p' }, { key: 'v', ctrlOrMeta: true }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
+  { id: 'cut', category: 'file', label: '剪切当前项', keys: [{ key: 'x' }, { key: 'x', ctrlOrMeta: true }], run: () => cutCurrentEntries() },
+  { id: 'rename', category: 'file', label: '重命名当前项', keys: [{ key: 'f2' }, { key: 'r' }], run: () => renameCurrentEntry() },
+  { id: 'select-first', category: 'selection', label: '选择第一项', keys: [[{ key: 'g' }, { key: 'g' }]], run: () => selectFirstEntry() },
+  { id: 'select-last', category: 'selection', label: '选择最后一项', keys: [{ key: 'g', shift: true }], run: () => selectLastEntry() },
+  { id: 'delete', category: 'file', label: `移到${trashLabel.value}`, keys: [{ key: 'd' }, { key: 'delete' }], run: () => deleteCurrentEntries() },
+  { id: 'permanent-delete', category: 'file', label: '永久删除当前项', keys: [{ key: 'd', shift: true }, { key: 'delete', shift: true }], run: () => permanentlyDeleteCurrentEntries() },
+  { id: 'confirm', category: 'dialog', label: '确认当前弹窗', keys: [{ key: 'enter' }], run: () => handleEnterShortcut(), allowInEditable: true, disabled: () => !deleteConfirmModal.value.show && !renameModal.value.show },
+  { id: 'focus-path', category: 'navigation', label: '聚焦路径栏', keys: [{ key: 'o' }, { key: 'l', ctrlOrMeta: true }], run: () => focusPathInput() },
+  { id: 'refresh', category: 'navigation', label: '刷新', keys: [{ key: 'r', ctrlOrMeta: true }], run: () => refresh() },
+  { id: 'split-vertical', category: 'panel', label: '竖直分屏', keys: [{ key: 'd', ctrlOrMeta: true }], run: () => emit('splitV') },
+  { id: 'split-horizontal', category: 'panel', label: '水平分屏', keys: [{ key: 'd', ctrlOrMeta: true, shift: true }], run: () => emit('splitH') },
+  { id: 'close-panel', category: 'panel', label: '关闭当前面板', keys: [{ key: 'w', ctrlOrMeta: true }], run: () => emit('close'), disabled: () => !props.closable },
+  { id: 'close-other-panels', category: 'panel', label: '关闭其它面板', keys: [{ key: 'w', ctrlOrMeta: true, shift: true }], run: () => emit('closeOthers'), disabled: () => !props.closable },
+  { id: 'focus-next-panel', category: 'panel', label: '切换到下一个面板', keys: [{ key: 'tab' }], run: () => {}, disabled: () => true },
 ]
 
-const shortcutHelpRows = computed(() => shortcutActions.map(action => ({
-  id: action.id,
-  label: action.label,
-  keys: action.keys.map(formatShortcutBinding).join(' / '),
-})))
+const shortcutCategoryLabels: Record<ShortcutCategory, string> = {
+  navigation: '导航',
+  file: '文件操作',
+  selection: '选择',
+  search: '搜索',
+  panel: '面板',
+  dialog: '弹窗',
+}
+
+const shortcutHelpGroups = computed(() => {
+  const categories: ShortcutCategory[] = ['navigation', 'selection', 'file', 'search', 'panel', 'dialog']
+  return categories
+    .map(category => ({
+      category,
+      label: shortcutCategoryLabels[category],
+      rows: shortcutActions
+        .filter(action => action.category === category)
+        .map(action => ({
+          id: action.id,
+          label: action.label,
+          keys: action.keys.map(formatShortcutBinding),
+        })),
+    }))
+    .filter(group => group.rows.length > 0)
+})
 
 useKeyboardShortcuts(() => shortcutActions, {
   active: isShortcutScopeActive,
@@ -1437,16 +1459,32 @@ useKeyboardShortcuts(() => shortcutActions, {
       v-model:show="shortcutHelpModal"
       preset="card"
       title="快捷键"
-      style="width: 520px"
+      style="width: min(900px, 92vw)"
     >
       <div class="shortcut-help">
         <div
-          v-for="shortcut in shortcutHelpRows"
-          :key="shortcut.id"
-          class="shortcut-help-row"
+          v-for="group in shortcutHelpGroups"
+          :key="group.category"
+          class="shortcut-help-group"
         >
-          <span class="shortcut-help-keys">{{ shortcut.keys }}</span>
-          <span class="shortcut-help-label">{{ shortcut.label }}</span>
+          <div class="shortcut-help-title">{{ group.label }}</div>
+          <div
+            v-for="shortcut in group.rows"
+            :key="shortcut.id"
+            class="shortcut-help-row"
+          >
+            <span class="shortcut-help-keys">
+              <NTag
+                v-for="key in shortcut.keys"
+                :key="key"
+                size="small"
+                :bordered="false"
+              >
+                {{ key }}
+              </NTag>
+            </span>
+            <span class="shortcut-help-label">{{ shortcut.label }}</span>
+          </div>
         </div>
       </div>
     </NModal>
@@ -1611,7 +1649,19 @@ useKeyboardShortcuts(() => shortcutActions, {
 
 .shortcut-help {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.shortcut-help-group {
+  display: grid;
   gap: 6px;
+}
+
+.shortcut-help-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--n-text-color-3);
 }
 
 .shortcut-help-row {
@@ -1623,9 +1673,14 @@ useKeyboardShortcuts(() => shortcutActions, {
 }
 
 .shortcut-help-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.shortcut-help-keys :deep(.n-tag__content) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  color: var(--n-text-color-2);
-  white-space: nowrap;
 }
 
 .shortcut-help-label {

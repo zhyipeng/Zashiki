@@ -164,7 +164,7 @@ function displayKey(key: string): string {
     case 'enter':
       return 'Enter'
     default:
-      return key.length === 1 ? key.toUpperCase() : key
+      return key
   }
 }
 
