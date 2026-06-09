@@ -17,6 +17,7 @@ import { useDragDrop, clearDrag } from '../composables/useDragDrop'
 import { useFileClipboard } from '../composables/useFileClipboard'
 import { formatShortcutBinding, useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
+import { notifyDirectoriesChanged, useDirectoryEvents } from '../composables/useDirectoryEvents'
 import DropConfirmModal from './DropConfirmModal.vue'
 import { fileTypeLabel, resolveFileIcon } from './fileIcons'
 import { parentPath as getParentPath } from './path'
@@ -73,12 +74,16 @@ function refresh() {
   }
 }
 
+const directoryEventToken = useDirectoryEvents(() => props.path, () => {
+  refresh()
+})
+
 const {
   isDragOver, dragLabel, hoveredFolderPath,
   pendingDrop, confirmDrop, cancelDrop,
   onRowDragStart,
   onDragOver, onDragEnter, onDragLeave, onDrop,
-} = useDragDrop(() => props.path, refresh)
+} = useDragDrop(() => props.path)
 
 const showConfirm = ref(false)
 watch(pendingDrop, (val) => { showConfirm.value = !!val })
@@ -183,7 +188,7 @@ const contextMenuActions: ContextMenuAction[] = [
       } else {
         await FileService.CopyEntries(paths, target.dir, 'rename')
       }
-      refresh()
+      notifyDirectoriesChanged([target.dir, ...sourceDirsForPaths(paths)])
     },
   },
   {
@@ -692,7 +697,7 @@ async function pasteClipboardEntries() {
   } else {
     await FileService.CopyEntries(paths, props.path, 'rename')
   }
-  refresh()
+  notifyDirectoriesChanged([props.path, ...sourceDirsForPaths(paths)])
 }
 
 function deleteCurrentEntries() {
@@ -736,6 +741,12 @@ function pathsForCopyPath(target: ContextTarget): string[] {
     return [target.dir]
   }
   return operationEntriesForEntry(target.entry).map(entry => entry.path)
+}
+
+function sourceDirsForPaths(paths: string[]): string[] {
+  return paths
+    .map(path => getParentPath(path, props.separator))
+    .filter((path): path is string => !!path)
 }
 
 function showContextMenu(e: MouseEvent, target: ContextTarget) {
@@ -789,7 +800,7 @@ async function confirmCreateFolder() {
   try {
     await FileService.CreateFolder(dir, name.trim() || '新建文件夹')
     closeCreateFolderModal()
-    refresh()
+    notifyDirectoriesChanged([dir])
   } catch (err) {
     console.error('Create folder failed:', err)
     message.error(friendlyActionError(err))
@@ -819,6 +830,7 @@ async function confirmRenameEntry() {
     const renamed = await FileService.RenameEntry(entry.path, trimmed)
     closeRenameModal()
     updateRenamedEntry(entry.path, renamed)
+    notifyDirectoriesChanged([props.path], { exclude: directoryEventToken })
   } catch (err) {
     console.error('Rename entry failed:', err)
     message.error(friendlyActionError(err))
@@ -871,6 +883,7 @@ async function confirmDeleteEntry() {
     const deletedPaths = await FileService.DeleteEntries(entries.map(entry => entry.path))
     closeDeleteConfirmModal()
     removeEntries(deletedPaths, fallbackIndex)
+    notifyDirectoriesChanged([props.path], { exclude: directoryEventToken })
   } catch (err) {
     console.error('Delete entry failed:', err)
     message.error(friendlyActionError(err))

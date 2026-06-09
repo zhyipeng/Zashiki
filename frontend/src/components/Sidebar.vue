@@ -5,6 +5,7 @@ import type { TreeOption } from 'naive-ui'
 import { FolderOutlined } from '@vicons/material'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { useSettings } from '../composables/useSettings'
+import { useDirectoryChangeListener } from '../composables/useDirectoryEvents'
 import { ancestorPaths, joinPath, pathRoot } from './path'
 
 type RootInfo = { name: string, path: string, freeSpace: number, totalSpace: number }
@@ -93,18 +94,51 @@ function onUpdateExpandedKeys(keys: string[]) {
 
 async function onLoad(node: TreeOption) {
   try {
-    const entries = await FileService.ListDir(node.key as string)
-    node.children = entries
-      .filter(e => e.isDir && (settings.showHiddenFiles || !e.isHidden))
-      .map(e => ({
-        label: e.name,
-        key: e.path,
-        isLeaf: false,
-      }))
+    node.children = await loadDirectoryChildren(node.key as string)
+    node.isLeaf = node.children.length === 0
   } catch {
     node.children = []
     node.isLeaf = true
   }
+}
+
+async function loadDirectoryChildren(path: string): Promise<TreeOption[]> {
+  const entries = await FileService.ListDir(path)
+  return entries
+    .filter(e => e.isDir && (settings.showHiddenFiles || !e.isHidden))
+    .map(e => ({
+      label: e.name,
+      key: e.path,
+      isLeaf: false,
+    }))
+}
+
+useDirectoryChangeListener((dirs) => {
+  for (const dir of dirs) {
+    refreshTreeNode(dir)
+  }
+})
+
+async function refreshTreeNode(path: string) {
+  const node = findTreeNode(treeData.value, path)
+  if (!node) return
+  try {
+    node.children = await loadDirectoryChildren(path)
+    node.isLeaf = node.children.length === 0
+  } catch {
+    node.children = []
+    node.isLeaf = true
+  }
+}
+
+function findTreeNode(nodes: TreeOption[] | undefined, key: string): TreeOption | null {
+  if (!nodes) return null
+  for (const node of nodes) {
+    if (String(node.key) === key) return node
+    const found = findTreeNode(node.children, key)
+    if (found) return found
+  }
+  return null
 }
 
 function onUpdateSelectedKeys(keys: string[]) {

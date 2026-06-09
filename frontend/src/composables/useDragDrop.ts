@@ -2,6 +2,7 @@ import { ref, computed, onUnmounted } from 'vue'
 import { useMessage } from 'naive-ui'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
+import { notifyDirectoriesChanged } from './useDirectoryEvents'
 
 const DRAG_MIME = 'application/x-file-explorer-paths'
 
@@ -20,7 +21,6 @@ interface PendingDrop {
 const dragPayload = ref<DragPayload | null>(null)
 const hoveredFolderPath = ref('')
 const pendingDrop = ref<PendingDrop | null>(null)
-const refreshCallbacks = new Set<() => void>()
 const dragOverRefs = new Set<{ value: boolean }>()
 
 function dragCleanup() {
@@ -35,13 +35,11 @@ export function clearDrag() {
   dragCleanup()
 }
 
-export function useDragDrop(currentPath: () => string, onChanged: () => void) {
+export function useDragDrop(currentPath: () => string) {
   const message = useMessage()
-  refreshCallbacks.add(onChanged)
   const isDragOver = ref(false)
   dragOverRefs.add(isDragOver)
   onUnmounted(() => {
-    refreshCallbacks.delete(onChanged)
     dragOverRefs.delete(isDragOver)
   })
 
@@ -133,9 +131,7 @@ export function useDragDrop(currentPath: () => string, onChanged: () => void) {
       } else {
         await FileService.CopyEntries(drop.paths, drop.targetDir, conflict)
       }
-      for (const cb of refreshCallbacks) {
-        cb()
-      }
+      notifyDirectoriesChanged([drop.sourcePanel, drop.targetDir])
     } catch (err) {
       console.error('Drop operation failed:', err)
       message.error(friendlyDropError(err))
