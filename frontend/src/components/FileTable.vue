@@ -1,7 +1,12 @@
+<script lang="ts">
+let nextFileTableShortcutScopeId = 1
+let activeFileTableShortcutScopeId = 0
+</script>
+
 <script setup lang="ts">
 import { ref, watch, computed, h, nextTick } from 'vue'
 import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
-import type { DataTableColumns, DropdownOption } from 'naive-ui'
+import type { DataTableColumns, DataTableInst, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
@@ -10,6 +15,8 @@ import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regula
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
 import { useFileClipboard } from '../composables/useFileClipboard'
+import { formatShortcutKey, useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
+import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
 import DropConfirmModal from './DropConfirmModal.vue'
 import { fileTypeLabel, resolveFileIcon } from './fileIcons'
 import { parentPath as getParentPath } from './path'
@@ -17,6 +24,12 @@ import { parentPath as getParentPath } from './path'
 const { settings } = useSettings()
 const message = useMessage()
 const parentEntryPathPrefix = '__zashiki_parent__:'
+const shortcutScopeId = nextFileTableShortcutScopeId++
+if (activeFileTableShortcutScopeId === 0) {
+  activeFileTableShortcutScopeId = shortcutScopeId
+}
+const fileTableRef = ref<HTMLElement | null>(null)
+const dataTableRef = ref<DataTableInst | null>(null)
 const fileClipboard = useFileClipboard()
 const cutPathSet = computed(() => {
   const clipboard = fileClipboard.clipboard.value
@@ -95,6 +108,7 @@ const errorMsg = ref('')
 const pathError = ref(false)
 const multiSelectMode = ref(false)
 const selectedRowKeys = ref<string[]>([])
+const currentRowKey = ref('')
 const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
 type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'copy-path' | 'copy' | 'cut' | 'delete'
@@ -127,6 +141,7 @@ const deleteConfirmModal = ref({
   show: false,
   entries: [] as FileEntry[],
 })
+const shortcutHelpModal = ref(false)
 
 const contextMenuActions: ContextMenuAction[] = [
   {
@@ -260,6 +275,7 @@ const canGoUp = computed(() => parentPath.value !== null)
 watch(() => props.path, (newPath) => {
   if (!newPath) return
   exitMultiSelectMode()
+  currentRowKey.value = ''
   const existingIndex = history.value.indexOf(newPath)
   const currentHistoryPath = historyIndex.value >= 0 ? history.value[historyIndex.value] : null
   if (newPath !== currentHistoryPath) {
@@ -360,6 +376,7 @@ const parentEntry = computed<FileEntry | null>(() => {
 
 const pathInput = ref(props.path)
 watch(() => props.path, (p) => { pathInput.value = p })
+const pathInputRef = ref<InstanceType<typeof NInput> | null>(null)
 const searchVisible = ref(false)
 const searchQuery = ref('')
 const searchInputRef = ref<InstanceType<typeof NInput> | null>(null)
@@ -373,12 +390,12 @@ function onPathSubmit() {
   if (trimmed && trimmed !== props.path) {
     emit('navigate', trimmed)
   }
+  focusFileTable()
 }
 
 function toggleSearch() {
   if (searchVisible.value) {
-    searchQuery.value = ''
-    searchVisible.value = false
+    closeSearch()
     return
   }
   searchVisible.value = true
@@ -386,6 +403,19 @@ function toggleSearch() {
   nextTick(() => {
     searchInputRef.value?.focus()
   })
+}
+
+function closeSearch() {
+  searchQuery.value = ''
+  searchVisible.value = false
+}
+
+function focusPathInput() {
+  pathInputRef.value?.focus()
+}
+
+function focusFileTable() {
+  fileTableRef.value?.focus({ preventScroll: true })
 }
 
 function ensurePinyinLoaded(): Promise<void> {
@@ -529,12 +559,16 @@ function exitMultiSelectMode() {
 
 function onUpdateCheckedRowKeys(keys: Array<string | number>) {
   selectedRowKeys.value = keys.map(key => String(key))
+  if (selectedRowKeys.value.length > 0) {
+    currentRowKey.value = selectedRowKeys.value[selectedRowKeys.value.length - 1]
+  }
 }
 
 function onRowClick(e: MouseEvent, row: FileEntry) {
-  if (isParentEntry(row)) return
   const target = e.target as HTMLElement | null
   if (target?.closest('.n-checkbox, button, input, textarea, a')) return
+  currentRowKey.value = row.path
+  if (isParentEntry(row)) return
   if (!multiSelectMode.value) {
     selectedRowKeys.value = [row.path]
     return
@@ -554,6 +588,108 @@ function toggleSelectedRow(path: string) {
 function selectedEntries() {
   const selected = selectedPathSet.value
   return entries.value.filter(entry => selected.has(entry.path))
+}
+
+function currentEntry(): FileEntry | null {
+  if (currentRowKey.value) {
+    const entry = visibleEntries.value.find(item => item.path === currentRowKey.value)
+    if (entry) return entry
+  }
+  if (selectedRowKeys.value.length > 0) {
+    const lastSelectedKey = selectedRowKeys.value[selectedRowKeys.value.length - 1]
+    return visibleEntries.value.find(item => item.path === lastSelectedKey) || null
+  }
+  return null
+}
+
+function fileOperationEntriesForCurrent(): FileEntry[] {
+  const selected = selectedEntries()
+  if (multiSelectMode.value && selected.length > 0) return selected
+  const entry = currentEntry()
+  if (!entry || isParentEntry(entry)) return []
+  return [entry]
+}
+
+function setCurrentEntry(entry: FileEntry) {
+  currentRowKey.value = entry.path
+  if (!multiSelectMode.value) {
+    selectedRowKeys.value = [entry.path]
+  }
+  scrollCurrentEntryIntoView(entry.path)
+}
+
+function scrollCurrentEntryIntoView(path: string) {
+  const rowIndex = visibleEntries.value.findIndex(entry => entry.path === path)
+  if (rowIndex < 0) return
+  nextTick(() => {
+    dataTableRef.value?.scrollTo({ index: rowIndex } as any)
+  })
+}
+
+function selectEntryByOffset(offset: number) {
+  const source = visibleEntries.value
+  if (source.length === 0) return
+  const currentIndex = source.findIndex(entry => entry.path === currentRowKey.value)
+  const nextIndex = currentIndex < 0
+    ? (offset > 0 ? 0 : source.length - 1)
+    : Math.min(Math.max(currentIndex + offset, 0), source.length - 1)
+  setCurrentEntry(source[nextIndex])
+}
+
+function selectFirstEntry() {
+  const first = visibleEntries.value[0]
+  if (first) setCurrentEntry(first)
+}
+
+function selectLastEntry() {
+  const last = visibleEntries.value[visibleEntries.value.length - 1]
+  if (last) setCurrentEntry(last)
+}
+
+async function openCurrentEntry() {
+  const entry = currentEntry()
+  if (!entry) return
+  await openEntries(operationEntriesForEntry(entry))
+}
+
+function copyCurrentEntries() {
+  const entries = fileOperationEntriesForCurrent()
+  if (entries.length === 0) return
+  fileClipboard.setClipboard(entries.map(entry => entry.path), 'copy')
+  message.success(entries.length > 1 ? `已复制 ${entries.length} 项到应用剪贴板` : '已复制到应用剪贴板')
+}
+
+function cutCurrentEntries() {
+  const entries = fileOperationEntriesForCurrent()
+  if (entries.length === 0) return
+  fileClipboard.setClipboard(entries.map(entry => entry.path), 'cut')
+  message.success(entries.length > 1 ? `已剪切 ${entries.length} 项到应用剪贴板` : '已剪切到应用剪贴板')
+}
+
+async function pasteClipboardEntries() {
+  const clipboard = fileClipboard.clipboard.value
+  if (!clipboard) return
+  const { paths, mode } = clipboard
+  if (mode === 'cut') {
+    await FileService.MoveEntries(paths, props.path, 'rename')
+    fileClipboard.clearClipboard()
+  } else {
+    await FileService.CopyEntries(paths, props.path, 'rename')
+  }
+  refresh()
+}
+
+function deleteCurrentEntries() {
+  const entries = fileOperationEntriesForCurrent()
+  if (entries.length === 0) return
+  openDeleteConfirmModal(entries)
+}
+
+function toggleCurrentEntrySelection() {
+  if (!multiSelectMode.value) return
+  const entry = currentEntry()
+  if (!entry || isParentEntry(entry)) return
+  toggleSelectedRow(entry.path)
 }
 
 function operationEntriesForEntry(entry: FileEntry): FileEntry[] {
@@ -696,10 +832,91 @@ function friendlyActionError(err: unknown): string {
   }
   return `操作失败：${text}`
 }
+
+function activateShortcutScope() {
+  activeFileTableShortcutScopeId = shortcutScopeId
+}
+
+function isShortcutScopeActive() {
+  return activeFileTableShortcutScopeId === shortcutScopeId
+}
+
+function handleEscapeShortcut() {
+  if (shortcutHelpModal.value) {
+    shortcutHelpModal.value = false
+    return
+  }
+  if (deleteConfirmModal.value.show) {
+    closeDeleteConfirmModal()
+    return
+  }
+  if (showConfirm.value) {
+    onCancel()
+    return
+  }
+  if (createFolderModal.value.show) {
+    closeCreateFolderModal()
+    return
+  }
+  if (contextMenu.value.show) {
+    hideContextMenu()
+    return
+  }
+  if (searchVisible.value) {
+    closeSearch()
+    return
+  }
+  if (multiSelectMode.value) {
+    exitMultiSelectMode()
+  }
+}
+
+async function handleEnterShortcut() {
+  if (deleteConfirmModal.value.show) {
+    await confirmDeleteEntry()
+  }
+}
+
+const shortcutActions: ShortcutAction[] = [
+  { id: 'select-next', label: '选择下一项', keys: [{ key: 'j' }], run: () => selectEntryByOffset(1) },
+  { id: 'select-prev', label: '选择上一项', keys: [{ key: 'k' }], run: () => selectEntryByOffset(-1) },
+  { id: 'go-up', label: '返回上级目录', keys: [{ key: 'h' }], run: () => goUp(), disabled: () => !canGoUp.value },
+  { id: 'open', label: '打开当前项', keys: [{ key: 'l' }], run: () => openCurrentEntry() },
+  { id: 'toggle-search', label: '切换搜索栏', keys: [{ key: '/' }, { key: 'f', ctrlOrMeta: true, allowInEditable: true }], run: () => toggleSearch() },
+  { id: 'escape', label: '退出搜索/多选/弹窗', keys: [{ key: 'escape' }], run: () => handleEscapeShortcut(), allowInEditable: true },
+  { id: 'toggle-multi-select', label: '切换多选模式', keys: [{ key: 'm' }], run: () => toggleMultiSelectMode() },
+  { id: 'toggle-current-selection', label: '切换当前项选择', keys: [{ key: 'space' }], run: () => toggleCurrentEntrySelection(), disabled: () => !multiSelectMode.value },
+  { id: 'help', label: '显示热键速查表', keys: [{ key: '?', shift: true }], run: () => { shortcutHelpModal.value = true } },
+  { id: 'copy', label: '复制当前项', keys: [{ key: 'y' }], run: () => copyCurrentEntries() },
+  { id: 'paste', label: '粘贴到当前目录', keys: [{ key: 'p' }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
+  { id: 'cut', label: '剪切当前项', keys: [{ key: 'x' }], run: () => cutCurrentEntries() },
+  { id: 'select-first', label: '选择第一项', keys: [{ key: 'g' }], run: () => selectFirstEntry() },
+  { id: 'select-last', label: '选择最后一项', keys: [{ key: 'g', shift: true }], run: () => selectLastEntry() },
+  { id: 'delete', label: '删除当前项', keys: [{ key: 'd' }], run: () => deleteCurrentEntries() },
+  { id: 'confirm', label: '确认当前弹窗', keys: [{ key: 'enter' }], run: () => handleEnterShortcut(), allowInEditable: true, disabled: () => !deleteConfirmModal.value.show },
+  { id: 'focus-path', label: '聚焦路径栏', keys: [{ key: 'o' }], run: () => focusPathInput() },
+  { id: 'refresh', label: '刷新', keys: [{ key: 'r' }], run: () => refresh() },
+]
+
+const shortcutHelpRows = computed(() => shortcutActions.map(action => ({
+  id: action.id,
+  label: action.label,
+  keys: action.keys.map(formatShortcutKey).join(' / '),
+})))
+
+useKeyboardShortcuts(() => shortcutActions, {
+  active: isShortcutScopeActive,
+})
 </script>
 
 <template>
-  <div class="file-table">
+  <div
+    ref="fileTableRef"
+    class="file-table"
+    tabindex="-1"
+    @pointerdown="activateShortcutScope"
+    @focusin="activateShortcutScope"
+  >
     <div class="toolbar">
       <div class="toolbar-left">
         <NButton
@@ -749,6 +966,7 @@ function friendlyActionError(err: unknown): string {
           </template>
         </NButton>
         <NInput
+          ref="pathInputRef"
           class="path-input"
           v-model:value="pathInput"
           size="tiny"
@@ -816,6 +1034,7 @@ function friendlyActionError(err: unknown): string {
         size="small"
         clearable
         placeholder="搜索当前文件夹"
+        @keyup.enter="focusFileTable"
       />
     </div>
     <div
@@ -832,6 +1051,7 @@ function friendlyActionError(err: unknown): string {
       <NAlert v-if="errorMsg" type="error" :title="errorMsg" class="error-alert" />
       <NSpin v-else-if="loading" class="spin-fill" />
       <NDataTable
+        ref="dataTableRef"
         v-else-if="visibleEntries.length > 0"
         :columns="columns"
         :data="visibleEntries"
@@ -843,6 +1063,7 @@ function friendlyActionError(err: unknown): string {
           class: [
             hoveredFolderPath === row.path ? 'drag-target-folder' : '',
             contextActivePath === row.path ? 'context-active-entry' : '',
+            currentRowKey === row.path ? 'current-entry' : '',
             selectedPathSet.has(row.path) ? 'selected-entry' : '',
             cutPathSet.has(row.path) ? 'cut-entry' : '',
           ].filter(Boolean).join(' '),
@@ -921,6 +1142,23 @@ function friendlyActionError(err: unknown): string {
           <NButton type="error" @click="confirmDeleteEntry">删除</NButton>
         </NSpace>
       </template>
+    </NModal>
+    <NModal
+      v-model:show="shortcutHelpModal"
+      preset="card"
+      title="快捷键"
+      style="width: 420px"
+    >
+      <div class="shortcut-help">
+        <div
+          v-for="shortcut in shortcutHelpRows"
+          :key="shortcut.id"
+          class="shortcut-help-row"
+        >
+          <span class="shortcut-help-keys">{{ shortcut.keys }}</span>
+          <span class="shortcut-help-label">{{ shortcut.label }}</span>
+        </div>
+      </div>
     </NModal>
   </div>
 </template>
@@ -1069,11 +1307,37 @@ function friendlyActionError(err: unknown): string {
   background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.18) !important;
 }
 
+:deep(tr.current-entry td:first-child) {
+  box-shadow: inset 3px 0 0 var(--n-primary-color, #18a058);
+}
+
 :deep(tr.context-active-entry td) {
   background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.14) !important;
 }
 
 :deep(tr.cut-entry td) {
   opacity: 0.45;
+}
+
+.shortcut-help {
+  display: grid;
+  gap: 6px;
+}
+
+.shortcut-help-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.shortcut-help-keys {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  color: var(--n-text-color-2);
+}
+
+.shortcut-help-label {
+  color: var(--n-text-color);
 }
 </style>
