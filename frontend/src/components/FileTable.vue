@@ -1553,7 +1553,12 @@ useKeyboardShortcuts(() => shortcutActions, {
 }
 
 .data-table {
+  --file-table-scroll-end-space: min(30vh, 240px);
   height: 100%;
+}
+
+:deep(.data-table .v-vl-items) {
+  padding-bottom: var(--file-table-scroll-end-space) !important;
 }
 
 .empty-fill {
