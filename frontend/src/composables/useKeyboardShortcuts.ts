@@ -10,17 +10,23 @@ export interface ShortcutKey {
   allowInEditable?: boolean
 }
 
+export type ShortcutBinding = ShortcutKey | ShortcutKey[]
+
 export interface ShortcutAction {
   id: string
   label: string
-  keys: ShortcutKey[]
+  keys: ShortcutBinding[]
   run: (event: KeyboardEvent) => void | Promise<void>
   allowInEditable?: boolean
   disabled?: () => boolean
   preventDefault?: boolean
 }
 
-export function formatShortcutKey(shortcut: ShortcutKey): string {
+export function formatShortcutBinding(binding: ShortcutBinding): string {
+  return normalizeBinding(binding).map(formatShortcutKey).join(' ')
+}
+
+function formatShortcutKey(shortcut: ShortcutKey): string {
   const parts: string[] = []
   if (shortcut.ctrlOrMeta) parts.push('Ctrl/Cmd')
   if (shortcut.ctrl) parts.push('Ctrl')
@@ -35,23 +41,53 @@ export function useKeyboardShortcuts(
   actions: () => ShortcutAction[],
   options: { active?: () => boolean } = {},
 ) {
+  let pendingSequence: ShortcutKey[] = []
+  let pendingTimer: number | null = null
+
   function onKeydown(event: KeyboardEvent) {
     if (options.active && !options.active()) return
-    const editable = isEditableTarget(event.target)
+    handleKeydown(event, false)
+  }
 
-    const action = actions().find((item) => {
-      if (item.disabled?.()) return false
-      return item.keys.some((shortcut) => {
-        if (editable && !item.allowInEditable && !shortcut.allowInEditable) return false
-        return matchesShortcut(event, shortcut)
+  function activeBindings(editable: boolean) {
+    return actions().flatMap((action) => {
+      if (action.disabled?.()) return []
+      return action.keys.flatMap((binding) => {
+        const sequence = normalizeBinding(binding)
+        const allow = action.allowInEditable || sequence.some(shortcut => shortcut.allowInEditable)
+        if (editable && !allow) return []
+        return [{ action, sequence }]
       })
     })
-    if (!action) return
+  }
 
-    if (action.preventDefault !== false) {
+  function handleKeydown(event: KeyboardEvent, retried: boolean) {
+    const editable = isEditableTarget(event.target)
+    const snapshot = eventToShortcutKey(event)
+    const sequence = [...pendingSequence, snapshot]
+    const bindings = activeBindings(editable)
+    const fullMatch = bindings.find(item => item.sequence.length === sequence.length && matchesSequence(sequence, item.sequence))
+    const hasPrefix = bindings.some(item => item.sequence.length > sequence.length && matchesSequence(sequence, item.sequence.slice(0, sequence.length)))
+
+    if (hasPrefix && !fullMatch) {
+      event.preventDefault()
+      setPendingSequence(sequence)
+      return
+    }
+
+    clearPendingSequence()
+
+    if (!fullMatch) {
+      if (!retried && sequence.length > 1) {
+        handleKeydown(event, true)
+      }
+      return
+    }
+
+    if (fullMatch.action.preventDefault !== false) {
       event.preventDefault()
     }
-    void action.run(event)
+    void fullMatch.action.run(event)
   }
 
   onMounted(() => {
@@ -60,20 +96,57 @@ export function useKeyboardShortcuts(
 
   onUnmounted(() => {
     window.removeEventListener('keydown', onKeydown)
+    clearPendingSequence()
   })
-}
 
-function matchesShortcut(event: KeyboardEvent, shortcut: ShortcutKey): boolean {
-  if (normalizeKey(event.key) !== normalizeKey(shortcut.key)) return false
-
-  if (shortcut.ctrlOrMeta) {
-    if (!event.ctrlKey && !event.metaKey) return false
-  } else {
-    if (event.ctrlKey !== !!shortcut.ctrl) return false
-    if (event.metaKey !== !!shortcut.meta) return false
+  function setPendingSequence(sequence: ShortcutKey[]) {
+    clearPendingSequence()
+    pendingSequence = sequence
+    pendingTimer = window.setTimeout(() => {
+      pendingSequence = []
+      pendingTimer = null
+    }, 800)
   }
 
-  return event.shiftKey === !!shortcut.shift && event.altKey === !!shortcut.alt
+  function clearPendingSequence() {
+    pendingSequence = []
+    if (pendingTimer !== null) {
+      window.clearTimeout(pendingTimer)
+      pendingTimer = null
+    }
+  }
+}
+
+function matchesSequence(actual: ShortcutKey[], expected: ShortcutKey[]): boolean {
+  if (actual.length > expected.length) return false
+  return actual.every((item, index) => matchesShortcutKey(item, expected[index]))
+}
+
+function matchesShortcutKey(actual: ShortcutKey, expected: ShortcutKey): boolean {
+  if (normalizeKey(actual.key) !== normalizeKey(expected.key)) return false
+
+  if (expected.ctrlOrMeta) {
+    if (!actual.ctrl && !actual.meta) return false
+  } else {
+    if (!!actual.ctrl !== !!expected.ctrl) return false
+    if (!!actual.meta !== !!expected.meta) return false
+  }
+
+  return !!actual.shift === !!expected.shift && !!actual.alt === !!expected.alt
+}
+
+function eventToShortcutKey(event: KeyboardEvent): ShortcutKey {
+  return {
+    key: normalizeKey(event.key),
+    shift: event.shiftKey,
+    ctrl: event.ctrlKey,
+    meta: event.metaKey,
+    alt: event.altKey,
+  }
+}
+
+function normalizeBinding(binding: ShortcutBinding): ShortcutKey[] {
+  return Array.isArray(binding) ? binding : [binding]
 }
 
 function normalizeKey(key: string): string {

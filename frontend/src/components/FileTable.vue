@@ -15,7 +15,7 @@ import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regula
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
 import { useFileClipboard } from '../composables/useFileClipboard'
-import { formatShortcutKey, useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
+import { formatShortcutBinding, useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
 import DropConfirmModal from './DropConfirmModal.vue'
 import { fileTypeLabel, resolveFileIcon } from './fileIcons'
@@ -140,6 +140,7 @@ const createFolderModal = ref({
 const deleteConfirmModal = ref({
   show: false,
   entries: [] as FileEntry[],
+  fallbackIndex: -1,
 })
 const shortcutHelpModal = ref(false)
 
@@ -775,9 +776,14 @@ async function confirmCreateFolder() {
 }
 
 function openDeleteConfirmModal(entries: FileEntry[]) {
+  const deletePathSet = new Set(entries.map(entry => entry.path))
+  const fallbackIndex = visibleEntries.value
+    .filter(entry => !isParentEntry(entry))
+    .findIndex(entry => deletePathSet.has(entry.path))
   deleteConfirmModal.value = {
     show: true,
     entries,
+    fallbackIndex,
   }
 }
 
@@ -786,22 +792,36 @@ function closeDeleteConfirmModal() {
 }
 
 async function confirmDeleteEntry() {
-  const entries = deleteConfirmModal.value.entries
+  const { entries, fallbackIndex } = deleteConfirmModal.value
   if (entries.length === 0) return
   try {
     const deletedPaths = await FileService.DeleteEntries(entries.map(entry => entry.path))
     closeDeleteConfirmModal()
-    removeEntries(deletedPaths)
+    removeEntries(deletedPaths, fallbackIndex)
   } catch (err) {
     console.error('Delete entry failed:', err)
     message.error(friendlyActionError(err))
   }
 }
 
-function removeEntries(paths: string[]) {
+function removeEntries(paths: string[], fallbackIndex = -1) {
   const deleted = new Set(paths)
   entries.value = entries.value.filter(entry => !deleted.has(entry.path))
   selectedRowKeys.value = selectedRowKeys.value.filter(path => !deleted.has(path))
+  nextTick(() => {
+    selectEntryNearIndex(fallbackIndex)
+  })
+}
+
+function selectEntryNearIndex(index: number) {
+  const candidates = visibleEntries.value.filter(entry => !isParentEntry(entry))
+  if (candidates.length === 0) {
+    currentRowKey.value = ''
+    selectedRowKeys.value = []
+    return
+  }
+  const normalizedIndex = index < 0 ? 0 : Math.min(index, candidates.length - 1)
+  setCurrentEntry(candidates[normalizedIndex])
 }
 
 async function onContextMenuSelect(key: string | number) {
@@ -890,7 +910,7 @@ const shortcutActions: ShortcutAction[] = [
   { id: 'copy', label: '复制当前项', keys: [{ key: 'y' }], run: () => copyCurrentEntries() },
   { id: 'paste', label: '粘贴到当前目录', keys: [{ key: 'p' }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
   { id: 'cut', label: '剪切当前项', keys: [{ key: 'x' }], run: () => cutCurrentEntries() },
-  { id: 'select-first', label: '选择第一项', keys: [{ key: 'g' }], run: () => selectFirstEntry() },
+  { id: 'select-first', label: '选择第一项', keys: [[{ key: 'g' }, { key: 'g' }]], run: () => selectFirstEntry() },
   { id: 'select-last', label: '选择最后一项', keys: [{ key: 'g', shift: true }], run: () => selectLastEntry() },
   { id: 'delete', label: '删除当前项', keys: [{ key: 'd' }], run: () => deleteCurrentEntries() },
   { id: 'confirm', label: '确认当前弹窗', keys: [{ key: 'enter' }], run: () => handleEnterShortcut(), allowInEditable: true, disabled: () => !deleteConfirmModal.value.show },
@@ -901,7 +921,7 @@ const shortcutActions: ShortcutAction[] = [
 const shortcutHelpRows = computed(() => shortcutActions.map(action => ({
   id: action.id,
   label: action.label,
-  keys: action.keys.map(formatShortcutKey).join(' / '),
+  keys: action.keys.map(formatShortcutBinding).join(' / '),
 })))
 
 useKeyboardShortcuts(() => shortcutActions, {
