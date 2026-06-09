@@ -15,6 +15,7 @@
   "dependencies": {
     "@wailsio/runtime": "latest",
     "naive-ui": "^2.44.1",
+    "pinyin-pro": "^3.28.1",
     "vue": "^3.2.45"
   },
   "devDependencies": {

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, computed, h } from 'vue'
+import { ref, watch, computed, h, nextTick } from 'vue'
 import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
 import type { DataTableColumns, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
-import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined } from '@vicons/material'
+import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined, SearchOutlined } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
@@ -27,8 +27,9 @@ const visibleEntries = computed(() => {
   const filteredEntries = settings.showHiddenFiles
     ? entries.value
     : entries.value.filter((e: FileEntry) => !e.isHidden)
+  const matchedEntries = filterEntriesBySearch(filteredEntries)
   const parent = parentEntry.value
-  return parent ? [parent, ...filteredEntries] : filteredEntries
+  return parent ? [parent, ...matchedEntries] : matchedEntries
 })
 
 const props = defineProps<{
@@ -359,12 +360,72 @@ const parentEntry = computed<FileEntry | null>(() => {
 
 const pathInput = ref(props.path)
 watch(() => props.path, (p) => { pathInput.value = p })
+const searchVisible = ref(false)
+const searchQuery = ref('')
+const searchInputRef = ref<InstanceType<typeof NInput> | null>(null)
+type PinyinFn = typeof import('pinyin-pro')['pinyin']
+let pinyinFn: PinyinFn | null = null
+let pinyinLoadPromise: Promise<void> | null = null
+const pinyinReady = ref(false)
 
 function onPathSubmit() {
   const trimmed = pathInput.value.trim()
   if (trimmed && trimmed !== props.path) {
     emit('navigate', trimmed)
   }
+}
+
+function toggleSearch() {
+  if (searchVisible.value) {
+    searchQuery.value = ''
+    searchVisible.value = false
+    return
+  }
+  searchVisible.value = true
+  void ensurePinyinLoaded()
+  nextTick(() => {
+    searchInputRef.value?.focus()
+  })
+}
+
+function ensurePinyinLoaded(): Promise<void> {
+  if (pinyinFn) return Promise.resolve()
+  if (!pinyinLoadPromise) {
+    pinyinLoadPromise = import('pinyin-pro').then((module) => {
+      pinyinFn = module.pinyin
+      pinyinReady.value = true
+    }).catch((err) => {
+      console.error('Failed to load pinyin search:', err)
+    })
+  }
+  return pinyinLoadPromise
+}
+
+function normalizeSearchText(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, '')
+}
+
+function pinyinText(text: string, pattern: 'pinyin' | 'first'): string {
+  if (!pinyinFn) return ''
+  return normalizeSearchText(pinyinFn(text, {
+    toneType: 'none',
+    pattern,
+    separator: '',
+    nonZh: 'consecutive',
+  }))
+}
+
+function matchesSearch(entry: FileEntry, query: string): boolean {
+  const name = normalizeSearchText(entry.name)
+  if (name.includes(query)) return true
+  return pinyinText(entry.name, 'pinyin').includes(query) || pinyinText(entry.name, 'first').includes(query)
+}
+
+function filterEntriesBySearch(source: FileEntry[]): FileEntry[] {
+  const query = normalizeSearchText(searchQuery.value)
+  pinyinReady.value
+  if (!query) return source
+  return source.filter(entry => matchesSearch(entry, query))
 }
 
 const baseColumns: DataTableColumns<FileEntry> = [
@@ -694,6 +755,16 @@ function friendlyActionError(err: unknown): string {
         />
         <NButton
           text
+          :type="searchVisible ? 'primary' : 'default'"
+          title="搜索"
+          @click="toggleSearch"
+        >
+          <template #icon>
+            <n-icon><SearchOutlined/></n-icon>
+          </template>
+        </NButton>
+        <NButton
+          text
           :type="multiSelectMode ? 'primary' : 'default'"
           title="多选"
           @click="toggleMultiSelectMode"
@@ -733,6 +804,15 @@ function friendlyActionError(err: unknown): string {
           </template>
         </NButton>
       </div>
+    </div>
+    <div v-if="searchVisible" class="search-row">
+      <NInput
+        ref="searchInputRef"
+        v-model:value="searchQuery"
+        size="small"
+        clearable
+        placeholder="搜索当前文件夹"
+      />
     </div>
     <div
       class="table-area"
@@ -777,7 +857,7 @@ function friendlyActionError(err: unknown): string {
         :virtual-scroll="true"
         class="data-table"
       />
-      <NEmpty v-else description="Empty directory" class="empty-fill" />
+      <NEmpty v-else :description="searchQuery ? 'No matches' : 'Empty directory'" class="empty-fill" />
       <NDropdown
         trigger="manual"
         placement="bottom-start"
@@ -878,6 +958,13 @@ function friendlyActionError(err: unknown): string {
 .path-input {
   flex: 1;
   min-width: 0;
+}
+
+.search-row {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--n-border-color);
+  background: var(--n-color);
+  flex-shrink: 0;
 }
 
 .table-area {
