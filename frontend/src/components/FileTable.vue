@@ -703,13 +703,55 @@ function onUpdateCheckedRowKeys(keys: Array<string | number>) {
 function onRowClick(e: MouseEvent, row: FileEntry) {
   const target = e.target as HTMLElement | null
   if (target?.closest('.n-checkbox, button, input, textarea, a')) return
-  currentRowKey.value = row.path
   if (isParentEntry(row)) return
+  const anchorKey = selectionAnchorKey()
+  if (e.shiftKey && anchorKey) {
+    selectRowRange(anchorKey, row.path, e.ctrlKey || e.metaKey)
+    currentRowKey.value = row.path
+    return
+  }
+  if (e.ctrlKey || e.metaKey) {
+    multiSelectMode.value = true
+    if (selectedRowKeys.value.length === 0 && anchorKey && anchorKey !== row.path) {
+      selectedRowKeys.value = [anchorKey]
+    }
+    toggleSelectedRow(row.path)
+    currentRowKey.value = row.path
+    return
+  }
+  currentRowKey.value = row.path
   if (!multiSelectMode.value) {
     selectedRowKeys.value = [row.path]
     return
   }
   toggleSelectedRow(row.path)
+}
+
+function selectionAnchorKey(): string {
+  if (currentRowKey.value && isSelectableEntryPath(currentRowKey.value)) return currentRowKey.value
+  const lastSelectedKey = selectedRowKeys.value[selectedRowKeys.value.length - 1]
+  return lastSelectedKey && isSelectableEntryPath(lastSelectedKey) ? lastSelectedKey : ''
+}
+
+function isSelectableEntryPath(path: string): boolean {
+  return visibleEntries.value.some(entry => entry.path === path && !isParentEntry(entry))
+}
+
+function selectRowRange(anchorPath: string, targetPath: string, preserveExisting: boolean) {
+  const selectableEntries = visibleEntries.value.filter(entry => !isParentEntry(entry))
+  const anchorIndex = selectableEntries.findIndex(entry => entry.path === anchorPath)
+  const targetIndex = selectableEntries.findIndex(entry => entry.path === targetPath)
+  if (anchorIndex < 0 || targetIndex < 0) return
+  const [start, end] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex]
+  const rangeKeys = selectableEntries.slice(start, end + 1).map(entry => entry.path)
+  multiSelectMode.value = true
+  selectedRowKeys.value = preserveExisting
+    ? uniqueKeys([...selectedRowKeys.value, ...rangeKeys])
+    : rangeKeys
+}
+
+function uniqueKeys(keys: string[]): string[] {
+  return Array.from(new Set(keys))
 }
 
 function toggleSelectedRow(path: string) {
