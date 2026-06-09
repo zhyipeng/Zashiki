@@ -532,9 +532,13 @@ function onUpdateCheckedRowKeys(keys: Array<string | number>) {
 }
 
 function onRowClick(e: MouseEvent, row: FileEntry) {
-  if (!multiSelectMode.value || isParentEntry(row)) return
+  if (isParentEntry(row)) return
   const target = e.target as HTMLElement | null
   if (target?.closest('.n-checkbox, button, input, textarea, a')) return
+  if (!multiSelectMode.value) {
+    selectedRowKeys.value = [row.path]
+    return
+  }
   toggleSelectedRow(row.path)
 }
 
