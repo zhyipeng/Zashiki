@@ -1,7 +1,7 @@
 import type { Component } from 'vue'
 import { FolderOutlined, ImageOutlined, InsertDriveFileOutlined, LinkOutlined } from '@vicons/material'
 import { Document24Regular, DocumentText24Regular } from '@vicons/fluent'
-import type { FileEntry } from '../../bindings/zashiki'
+import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
 
 export type FileIconSource =
   | 'directory'

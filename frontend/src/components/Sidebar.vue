@@ -3,7 +3,7 @@ import { computed, h, ref, watch } from 'vue'
 import { NTree, NDivider, NText, NSplit, NIcon } from 'naive-ui'
 import type { TreeOption } from 'naive-ui'
 import { FolderOutlined } from '@vicons/material'
-import { FileService } from '../../bindings/zashiki'
+import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { useSettings } from '../composables/useSettings'
 import { ancestorPaths, joinPath, pathRoot } from './path'
 

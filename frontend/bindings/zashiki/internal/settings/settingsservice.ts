@@ -10,13 +10,13 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 export function GetSettings(): $CancellablePromise<$models.Settings> {
-    return $Call.ByID(3034808949).then(($result: any) => {
+    return $Call.ByID(489261139).then(($result: any) => {
         return $$createType0($result);
     });
 }
 
 export function SaveSettings(settings: $models.Settings): $CancellablePromise<void> {
-    return $Call.ByID(2662658340, settings);
+    return $Call.ByID(4168260778, settings);
 }
 
 // Private type creation functions

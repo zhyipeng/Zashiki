@@ -1,7 +1,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useMessage } from 'naive-ui'
-import type { FileEntry } from '../../bindings/zashiki'
-import { FileService } from '../../bindings/zashiki'
+import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
+import { FileService } from '../../bindings/zashiki/internal/filemanager'
 
 const DRAG_MIME = 'application/x-file-explorer-paths'
 

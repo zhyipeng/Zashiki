@@ -7,7 +7,7 @@ import { Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as time$0 from "../time/models.js";
+import * as time$0 from "../../../time/models.js";
 
 export class FileEntry {
     "name": string;
@@ -92,26 +92,5 @@ export class RootEntry {
     static createFrom($$source: any = {}): RootEntry {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new RootEntry($$parsedSource as Partial<RootEntry>);
-    }
-}
-
-export class Settings {
-    "showHiddenFiles": boolean;
-
-    /** Creates a new Settings instance. */
-    constructor($$source: Partial<Settings> = {}) {
-        if (!("showHiddenFiles" in $$source)) {
-            this["showHiddenFiles"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new Settings instance from a string or object.
-     */
-    static createFrom($$source: any = {}): Settings {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new Settings($$parsedSource as Partial<Settings>);
     }
 }

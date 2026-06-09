@@ -6,6 +6,9 @@ import (
 	"log"
 	"time"
 
+	"zashiki/internal/filemanager"
+	"zashiki/internal/settings"
+
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -38,8 +41,8 @@ func main() {
 		Name:        "Zashiki",
 		Description: "A file explorer",
 		Services: []application.Service{
-			application.NewService(&FileService{}),
-			application.NewService(&SettingsService{}),
+			application.NewService(&filemanager.FileService{}),
+			application.NewService(&settings.SettingsService{}),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

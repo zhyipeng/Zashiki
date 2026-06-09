@@ -10,65 +10,65 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 export function CheckConflicts(paths: string[], destDir: string): $CancellablePromise<string[]> {
-    return $Call.ByID(2845967612, paths, destDir).then(($result: any) => {
+    return $Call.ByID(1244242588, paths, destDir).then(($result: any) => {
         return $$createType0($result);
     });
 }
 
 export function CopyEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<void> {
-    return $Call.ByID(3751035018, paths, destDir, conflict);
+    return $Call.ByID(2898335274, paths, destDir, conflict);
 }
 
 export function CreateFolder(parentDir: string, name: string): $CancellablePromise<string> {
-    return $Call.ByID(1509865311, parentDir, name);
+    return $Call.ByID(732689535, parentDir, name);
 }
 
 export function DeleteEntries(paths: string[]): $CancellablePromise<string[]> {
-    return $Call.ByID(3821512136, paths).then(($result: any) => {
+    return $Call.ByID(1689627624, paths).then(($result: any) => {
         return $$createType0($result);
     });
 }
 
 export function GetFileInfo(path: string): $CancellablePromise<$models.FileEntry> {
-    return $Call.ByID(2925622295, path).then(($result: any) => {
+    return $Call.ByID(1693135863, path).then(($result: any) => {
         return $$createType1($result);
     });
 }
 
 export function GetHomeDir(): $CancellablePromise<string> {
-    return $Call.ByID(3279025189);
+    return $Call.ByID(4140196485);
 }
 
 export function GetRoots(): $CancellablePromise<$models.RootEntry[]> {
-    return $Call.ByID(3710679330).then(($result: any) => {
+    return $Call.ByID(578700098).then(($result: any) => {
         return $$createType3($result);
     });
 }
 
 export function GetSeparator(): $CancellablePromise<string> {
-    return $Call.ByID(1235100380);
+    return $Call.ByID(400433148);
 }
 
 export function IsSameDrive(path1: string, path2: string): $CancellablePromise<boolean> {
-    return $Call.ByID(491311531, path1, path2);
+    return $Call.ByID(2819228555, path1, path2);
 }
 
 export function ListDir(path: string): $CancellablePromise<$models.FileEntry[]> {
-    return $Call.ByID(168987282, path).then(($result: any) => {
+    return $Call.ByID(461256242, path).then(($result: any) => {
         return $$createType4($result);
     });
 }
 
 export function MoveEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<void> {
-    return $Call.ByID(2941554602, paths, destDir, conflict);
+    return $Call.ByID(1201006282, paths, destDir, conflict);
 }
 
 export function OpenFile(path: string): $CancellablePromise<void> {
-    return $Call.ByID(2444982985, path);
+    return $Call.ByID(975761513, path);
 }
 
 export function OpenTerminal(path: string): $CancellablePromise<void> {
-    return $Call.ByID(676363275, path);
+    return $Call.ByID(2322032555, path);
 }
 
 // Private type creation functions

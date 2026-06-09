@@ -1,5 +1,5 @@
 import { reactive, ref } from 'vue'
-import { SettingsService } from '../../bindings/zashiki'
+import { SettingsService } from '../../bindings/zashiki/internal/settings'
 
 export interface Settings {
   showHiddenFiles: boolean

@@ -1,6 +1,6 @@
 //go:build !windows
 
-package main
+package filemanager
 
 func isHiddenEntry(name string, _ string) bool {
 	if name == "." || name == ".." {

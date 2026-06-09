@@ -1,163 +1,13 @@
-package main
+package filemanager
 
 import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
-	"time"
 )
-
-type FileEntry struct {
-	Name         string    `json:"name"`
-	Path         string    `json:"path"`
-	Size         int64     `json:"size"`
-	ModTime      time.Time `json:"modTime"`
-	IsDir        bool      `json:"isDir"`
-	IsHidden     bool      `json:"isHidden"`
-	IsSymlink    bool      `json:"isSymlink"`
-	LinkTarget   string    `json:"linkTarget"`
-	IsExecutable bool      `json:"isExecutable"`
-}
-
-type RootEntry struct {
-	Name       string `json:"name"`
-	Path       string `json:"path"`
-	FreeSpace  uint64 `json:"freeSpace"`
-	TotalSpace uint64 `json:"totalSpace"`
-}
-
-type FileService struct{}
-
-func (f *FileService) ListDir(path string) ([]FileEntry, error) {
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]FileEntry, 0, len(entries))
-	for _, entry := range entries {
-		fullPath := filepath.Join(path, entry.Name())
-		info, err := os.Lstat(fullPath)
-		if err != nil {
-			continue
-		}
-		result = append(result, fileEntryFromInfo(entry.Name(), fullPath, info))
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].IsDir != result[j].IsDir {
-			return result[i].IsDir
-		}
-		return result[i].Name < result[j].Name
-	})
-
-	return result, nil
-}
-
-func (f *FileService) OpenFile(path string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		return exec.Command("open", path).Start()
-	case "linux":
-		return exec.Command("xdg-open", path).Start()
-	case "windows":
-		return exec.Command("rundll32", "url.dll,FileProtocolHandler", path).Start()
-	default:
-		return exec.Command("open", path).Start()
-	}
-}
-
-func (f *FileService) OpenTerminal(path string) error {
-	dir, err := terminalDir(path)
-	if err != nil {
-		return err
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		return exec.Command("open", "-a", "Terminal", dir).Start()
-	case "linux":
-		return startLinuxTerminal(dir)
-	case "windows":
-		return exec.Command("cmd", "/C", "start", "", "cmd", "/K", "cd", "/d", dir).Start()
-	default:
-		return exec.Command("open", dir).Start()
-	}
-}
-
-func (f *FileService) GetHomeDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		roots := getRoots()
-		if len(roots) > 0 {
-			return roots[0].Path
-		}
-		return string(filepath.Separator)
-	}
-	return home
-}
-
-func (f *FileService) GetSeparator() string {
-	return string(filepath.Separator)
-}
-
-func (f *FileService) GetRoots() []RootEntry {
-	return getRoots()
-}
-
-func (f *FileService) GetFileInfo(path string) (FileEntry, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return FileEntry{}, err
-	}
-	return fileEntryFromInfo(info.Name(), path, info), nil
-}
-
-func (f *FileService) IsSameDrive(path1, path2 string) bool {
-	return isSameDrive(path1, path2)
-}
-
-func fileEntryFromInfo(name, path string, info os.FileInfo) FileEntry {
-	mode := info.Mode()
-	isSymlink := mode&os.ModeSymlink != 0
-	linkTarget := ""
-	if isSymlink {
-		if target, err := os.Readlink(path); err == nil {
-			linkTarget = target
-		}
-	}
-	return FileEntry{
-		Name:         name,
-		Path:         path,
-		Size:         info.Size(),
-		ModTime:      info.ModTime(),
-		IsDir:        info.IsDir(),
-		IsHidden:     isHiddenEntry(name, path),
-		IsSymlink:    isSymlink,
-		LinkTarget:   linkTarget,
-		IsExecutable: isExecutableEntry(path, mode, info.IsDir()),
-	}
-}
-
-func isExecutableEntry(path string, mode os.FileMode, isDir bool) bool {
-	if isDir {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		switch strings.ToLower(filepath.Ext(path)) {
-		case ".exe", ".bat", ".cmd", ".com", ".ps1":
-			return true
-		default:
-			return false
-		}
-	}
-	return mode&0o111 != 0
-}
 
 func (f *FileService) CheckConflicts(paths []string, destDir string) ([]string, error) {
 	var conflicts []string
@@ -344,43 +194,6 @@ func validateDeletePath(path string) error {
 		return fmt.Errorf("cannot delete filesystem root %q", path)
 	}
 	return nil
-}
-
-func terminalDir(path string) (string, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		return path, nil
-	}
-	return filepath.Dir(path), nil
-}
-
-func startLinuxTerminal(dir string) error {
-	commands := [][]string{
-		{"x-terminal-emulator", "--working-directory", dir},
-		{"gnome-terminal", "--working-directory", dir},
-		{"konsole", "--workdir", dir},
-		{"xfce4-terminal", "--working-directory", dir},
-		{"xterm", "-e", "sh", "-c", "cd \"$1\" && exec sh", "sh", dir},
-	}
-	var lastErr error
-	for _, command := range commands {
-		if _, err := exec.LookPath(command[0]); err != nil {
-			lastErr = err
-			continue
-		}
-		if err := exec.Command(command[0], command[1:]...).Start(); err != nil {
-			lastErr = err
-			continue
-		}
-		return nil
-	}
-	if lastErr != nil {
-		return lastErr
-	}
-	return fmt.Errorf("no terminal application found")
 }
 
 func uniquePath(path string) string {

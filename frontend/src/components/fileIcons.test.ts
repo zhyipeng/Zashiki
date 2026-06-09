@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { FileEntry } from '../../bindings/zashiki'
+import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
 import { fileTypeLabel } from './fileIcons'
 
 function entry(overrides: Partial<FileEntry>): FileEntry {

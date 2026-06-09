@@ -5,7 +5,7 @@ import Sidebar from './components/Sidebar.vue'
 import SplitNode from './components/SplitNode.vue'
 import {createLeaf, splitLeaf, closeLeaf, navigateLeaf, getFirstLeafId, findLeafById} from './components/tree'
 import type {TreeNode} from './components/tree'
-import {FileService} from '../bindings/zashiki'
+import {FileService} from '../bindings/zashiki/internal/filemanager'
 import { Settings28Regular } from '@vicons/fluent'
 import SettingsModal from './components/SettingsModal.vue'
 
