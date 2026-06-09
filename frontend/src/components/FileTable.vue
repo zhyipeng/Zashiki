@@ -6,7 +6,7 @@ let activeFileTableShortcutScopeId = 0
 <script setup lang="ts">
 import { ref, watch, computed, h, nextTick, onMounted } from 'vue'
 import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NDropdown, NModal, NSpace, useMessage } from 'naive-ui'
-import type { DataTableColumns, DataTableInst, DropdownOption } from 'naive-ui'
+import type { DataTableColumns, DataTableInst, DataTableSortState, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
@@ -39,8 +39,9 @@ const visibleEntries = computed(() => {
     ? entries.value
     : entries.value.filter((e: FileEntry) => !e.isHidden)
   const matchedEntries = filterEntriesBySearch(filteredEntries)
+  const sortedEntries = sortEntries(matchedEntries)
   const parent = parentEntry.value
-  return parent ? [parent, ...matchedEntries] : matchedEntries
+  return parent ? [parent, ...sortedEntries] : sortedEntries
 })
 
 const props = defineProps<{
@@ -115,6 +116,7 @@ const multiSelectMode = ref(false)
 const selectedRowKeys = ref<string[]>([])
 const currentRowKey = ref('')
 const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
+const sortState = ref<DataTableSortState | null>(null)
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
 type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete'
 
@@ -339,20 +341,42 @@ function compareTime(a: unknown, b: unknown): number {
   return left - right
 }
 
+function compareEntriesByColumn(columnKey: string, row1: FileEntry, row2: FileEntry): number {
+  switch (columnKey) {
+    case 'name':
+      return compareText(row1.name, row2.name)
+    case 'type':
+      return compareText(fileTypeLabel(row1), fileTypeLabel(row2))
+    case 'size':
+      return row1.size - row2.size
+    case 'modTime':
+      return compareTime(row1.modTime, row2.modTime)
+    default:
+      return 0
+  }
+}
+
+function sortEntries(source: FileEntry[]): FileEntry[] {
+  const state = sortState.value
+  if (!state?.order) return source
+  const direction = state.order === 'ascend' ? 1 : -1
+  return [...source].sort((row1, row2) => direction * compareEntriesByColumn(String(state.columnKey), row1, row2))
+}
+
+function sortOrderFor(columnKey: string) {
+  return sortState.value?.columnKey === columnKey ? sortState.value.order : false
+}
+
+function onUpdateSorter(state: DataTableSortState | DataTableSortState[] | null) {
+  sortState.value = Array.isArray(state) ? state[0] || null : state
+}
+
 function isParentEntry(row: FileEntry): boolean {
   return row.path.startsWith(parentEntryPathPrefix)
 }
 
 function actualEntryPath(row: FileEntry): string {
   return isParentEntry(row) ? row.path.slice(parentEntryPathPrefix.length) : row.path
-}
-
-function comparePinnedParent(row1: FileEntry, row2: FileEntry): number | null {
-  const leftParent = isParentEntry(row1)
-  const rightParent = isParentEntry(row2)
-  if (leftParent && !rightParent) return -1
-  if (!leftParent && rightParent) return 1
-  return null
 }
 
 function goBack() {
@@ -479,54 +503,61 @@ function filterEntriesBySearch(source: FileEntry[]): FileEntry[] {
   return source.filter(entry => matchesSearch(entry, query))
 }
 
-const baseColumns: DataTableColumns<FileEntry> = [
-  {
-    title: 'Name',
-    key: 'name',
-    sorter: (row1, row2) => comparePinnedParent(row1, row2) ?? compareText(row1.name, row2.name),
-    render(row) {
-      const fileIcon = resolveFileIcon(row)
-      return h('div', { class: 'file-name-cell' }, [
-        h(NIcon, {
-          class: 'file-icon',
-          color: fileIcon.color,
-          size: 18,
-          title: fileIcon.label,
-        }, { default: () => h(fileIcon.icon) }),
-        h('span', { class: 'file-name-text' }, row.name),
-      ])
+function createBaseColumns(): DataTableColumns<FileEntry> {
+  return [
+    {
+      title: 'Name',
+      key: 'name',
+      sorter: true,
+      sortOrder: sortOrderFor('name'),
+      render(row) {
+        const fileIcon = resolveFileIcon(row)
+        return h('div', { class: 'file-name-cell' }, [
+          h(NIcon, {
+            class: 'file-icon',
+            color: fileIcon.color,
+            size: 18,
+            title: fileIcon.label,
+          }, { default: () => h(fileIcon.icon) }),
+          h('span', { class: 'file-name-text' }, row.name),
+        ])
+      },
     },
-  },
-  {
-    title: 'Type',
-    key: 'type',
-    width: '110px',
-    sorter: (row1, row2) => comparePinnedParent(row1, row2) ?? compareText(fileTypeLabel(row1), fileTypeLabel(row2)),
-    render(row) {
-      return fileTypeLabel(row)
+    {
+      title: 'Type',
+      key: 'type',
+      width: '110px',
+      sorter: true,
+      sortOrder: sortOrderFor('type'),
+      render(row) {
+        return fileTypeLabel(row)
+      },
     },
-  },
-  {
-    title: 'Size',
-    key: 'size',
-    width: '85px',
-    sorter: (row1, row2) => comparePinnedParent(row1, row2) ?? row1.size - row2.size,
-    render(row) {
-      return row.isDir ? '-' : formatSize(row.size)
+    {
+      title: 'Size',
+      key: 'size',
+      width: '85px',
+      sorter: true,
+      sortOrder: sortOrderFor('size'),
+      render(row) {
+        return row.isDir ? '-' : formatSize(row.size)
+      },
     },
-  },
-  {
-    title: 'Modified',
-    key: 'modTime',
-    width: '165px',
-    sorter: (row1, row2) => comparePinnedParent(row1, row2) ?? compareTime(row1.modTime, row2.modTime),
-    render(row) {
-      return formatTime(row.modTime)
+    {
+      title: 'Modified',
+      key: 'modTime',
+      width: '165px',
+      sorter: true,
+      sortOrder: sortOrderFor('modTime'),
+      render(row) {
+        return formatTime(row.modTime)
+      },
     },
-  },
-]
+  ]
+}
 
 const columns = computed<DataTableColumns<FileEntry>>(() => {
+  const baseColumns = createBaseColumns()
   if (!multiSelectMode.value) return baseColumns
   return [
     {
@@ -1194,6 +1225,7 @@ useKeyboardShortcuts(() => shortcutActions, {
         :row-key="(row: FileEntry) => row.path"
         :checked-row-keys="selectedRowKeys"
         :on-update:checked-row-keys="onUpdateCheckedRowKeys"
+        :on-update:sorter="onUpdateSorter"
         :row-props="(row: FileEntry) => ({
           style: 'cursor: pointer',
           class: [
@@ -1215,6 +1247,7 @@ useKeyboardShortcuts(() => shortcutActions, {
         single-line
         size="small"
         flex-height
+        remote
         :virtual-scroll="true"
         class="data-table"
       />
