@@ -38,10 +38,10 @@ func getTrashInfo() TrashInfo {
 	return TrashInfo{Label: "回收站", Available: true}
 }
 
-func trashEntry(path string) error {
+func trashEntry(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return err
+		return "", err
 	}
 	from := append(syscall.StringToUTF16(abs), 0)
 	op := shFileOpStruct{
@@ -51,12 +51,12 @@ func trashEntry(path string) error {
 	}
 	ret, _, _ := procSHFileOperation.Call(uintptr(unsafe.Pointer(&op)))
 	if ret != 0 {
-		return syscall.Errno(ret)
+		return "", syscall.Errno(ret)
 	}
 	if op.fAnyOperationsAborted != 0 {
-		return os.ErrPermission
+		return "", os.ErrPermission
 	}
-	return nil
+	return "", nil
 }
 
 func openTrash() error {

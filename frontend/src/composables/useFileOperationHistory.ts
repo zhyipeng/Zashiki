@@ -9,6 +9,13 @@ type HistoryOperation =
   | { type: 'rename', beforePath: string, afterPath: string, beforeName: string, afterName: string, affectedDirs: string[] }
   | { type: 'copy', pairs: EntryPathPair[], affectedDirs: string[] }
   | { type: 'move', pairs: EntryPathPair[], affectedDirs: string[] }
+  | { type: 'trash', pairs: EntryPathPair[], affectedDirs: string[] }
+
+interface OperationSummary {
+  action: string
+  target: string
+  sentence: string
+}
 
 const undoStack = ref<HistoryOperation[]>([])
 const redoStack = ref<HistoryOperation[]>([])
@@ -17,6 +24,8 @@ const running = ref(false)
 export function useFileOperationHistory(separator: () => string) {
   const canUndo = computed(() => undoStack.value.length > 0 && !running.value)
   const canRedo = computed(() => redoStack.value.length > 0 && !running.value)
+  const undoSummary = computed(() => summarizeOperation(lastItem(undoStack.value)))
+  const redoSummary = computed(() => summarizeOperation(lastItem(redoStack.value)))
 
   function recordCreateFolder(path: string) {
     pushOperation({
@@ -52,6 +61,16 @@ export function useFileOperationHistory(separator: () => string) {
     if (pairs.length === 0) return
     pushOperation({
       type: 'move',
+      pairs,
+      affectedDirs: uniqueStrings(pairs.flatMap(pair => [dirForPath(pair.sourcePath), dirForPath(pair.targetPath)])),
+    })
+  }
+
+  function recordTrash(results: EntryOperationResult[]) {
+    const pairs = pairsForSafeResults(results)
+    if (pairs.length === 0) return
+    pushOperation({
+      type: 'trash',
       pairs,
       affectedDirs: uniqueStrings(pairs.flatMap(pair => [dirForPath(pair.sourcePath), dirForPath(pair.targetPath)])),
     })
@@ -111,6 +130,9 @@ export function useFileOperationHistory(separator: () => string) {
       case 'move':
         await FileService.MoveEntriesToTargets(reversePairs(operation.pairs))
         return
+      case 'trash':
+        await FileService.MoveEntriesToTargets(reversePairs(operation.pairs))
+        return
     }
   }
 
@@ -126,6 +148,9 @@ export function useFileOperationHistory(separator: () => string) {
         await FileService.CopyEntriesToTargets(operation.pairs)
         return
       case 'move':
+        await FileService.MoveEntriesToTargets(operation.pairs)
+        return
+      case 'trash':
         await FileService.MoveEntriesToTargets(operation.pairs)
         return
     }
@@ -149,12 +174,15 @@ export function useFileOperationHistory(separator: () => string) {
   return {
     canUndo,
     canRedo,
+    undoSummary,
+    redoSummary,
     undo,
     redo,
     recordCreateFolder,
     recordRename,
     recordCopy,
     recordMove,
+    recordTrash,
   }
 }
 
@@ -163,6 +191,63 @@ function basename(path: string): string {
   const backslashIndex = path.lastIndexOf('\\')
   const index = Math.max(slashIndex, backslashIndex)
   return index < 0 ? path : path.slice(index + 1)
+}
+
+function lastItem<T>(items: T[]): T | null {
+  return items.length === 0 ? null : items[items.length - 1]
+}
+
+function summarizeOperation(operation: HistoryOperation | null): OperationSummary | null {
+  if (!operation) return null
+  switch (operation.type) {
+    case 'create-folder': {
+      const target = targetLabel([operation.path])
+      return {
+        action: '新建文件夹',
+        target,
+        sentence: `新建文件夹 ${target}`,
+      }
+    }
+    case 'rename': {
+      const target = `「${operation.beforeName}」为「${operation.afterName}」`
+      return {
+        action: '重命名',
+        target,
+        sentence: `重命名 ${target}`,
+      }
+    }
+    case 'copy': {
+      const target = targetLabel(operation.pairs.map(pair => pair.sourcePath))
+      return {
+        action: '复制',
+        target,
+        sentence: `复制 ${target}`,
+      }
+    }
+    case 'move': {
+      const target = targetLabel(operation.pairs.map(pair => pair.sourcePath))
+      return {
+        action: '移动',
+        target,
+        sentence: `移动 ${target}`,
+      }
+    }
+    case 'trash': {
+      const target = targetLabel(operation.pairs.map(pair => pair.sourcePath))
+      return {
+        action: '移到回收站',
+        target,
+        sentence: `移到回收站 ${target}`,
+      }
+    }
+  }
+}
+
+function targetLabel(paths: string[]): string {
+  if (paths.length === 0) return ''
+  const firstName = basename(paths[0])
+  if (paths.length === 1) return `「${firstName}」`
+  return `「${firstName}」等 ${paths.length} 项`
 }
 
 function uniqueStrings(values: string[]): string[] {

@@ -168,6 +168,16 @@ const deleteConfirmModal = ref({
   fallbackIndex: -1,
   permanent: false,
 })
+const historyConfirmModal = ref({
+  show: false,
+  action: '' as 'undo' | 'redo' | '',
+})
+const historyConfirmActionLabel = computed(() => historyConfirmModal.value.action === 'undo' ? '撤销' : '重做')
+const historyConfirmSummary = computed(() => {
+  if (historyConfirmModal.value.action === 'undo') return operationHistory.undoSummary.value
+  if (historyConfirmModal.value.action === 'redo') return operationHistory.redoSummary.value
+  return null
+})
 const shortcutHelpModal = ref(false)
 
 const contextMenuActions: ContextMenuAction[] = [
@@ -1066,9 +1076,14 @@ async function confirmDeleteEntry() {
   if (entries.length === 0) return
   try {
     const paths = entries.map(entry => entry.path)
-    const deletedPaths = permanent
-      ? await FileService.DeleteEntries(paths)
-      : await FileService.TrashEntries(paths)
+    let deletedPaths: string[]
+    if (permanent) {
+      deletedPaths = await FileService.DeleteEntries(paths)
+    } else {
+      const results = await FileService.TrashEntries(paths)
+      operationHistory.recordTrash(results)
+      deletedPaths = results.map(result => result.sourcePath)
+    }
     closeDeleteConfirmModal()
     removeEntries(deletedPaths, fallbackIndex)
     notifyDirectoriesChanged([props.path], { exclude: directoryEventToken })
@@ -1160,6 +1175,10 @@ function handleEscapeShortcut() {
     closeDeleteConfirmModal()
     return
   }
+  if (historyConfirmModal.value.show) {
+    closeHistoryConfirmModal()
+    return
+  }
   if (showConfirm.value) {
     onCancel()
     return
@@ -1192,6 +1211,41 @@ async function handleEnterShortcut() {
   }
   if (deleteConfirmModal.value.show) {
     await confirmDeleteEntry()
+    return
+  }
+  if (historyConfirmModal.value.show) {
+    await confirmHistoryOperation()
+  }
+}
+
+function requestUndoOperation() {
+  if (!operationHistory.canUndo.value) return
+  historyConfirmModal.value = {
+    show: true,
+    action: 'undo',
+  }
+}
+
+function requestRedoOperation() {
+  if (!operationHistory.canRedo.value) return
+  historyConfirmModal.value = {
+    show: true,
+    action: 'redo',
+  }
+}
+
+function closeHistoryConfirmModal() {
+  historyConfirmModal.value.show = false
+}
+
+async function confirmHistoryOperation() {
+  const action = historyConfirmModal.value.action
+  if (!action) return
+  closeHistoryConfirmModal()
+  if (action === 'undo') {
+    await undoLastOperation()
+  } else {
+    await redoLastOperation()
   }
 }
 
@@ -1226,8 +1280,8 @@ const shortcutActions: CategorizedShortcutAction[] = [
   { id: 'help', category: 'dialog', label: '显示热键速查表', keys: [{ key: '?', shift: true }], run: () => { shortcutHelpModal.value = true } },
   { id: 'copy', category: 'file', label: '复制当前项', keys: [{ key: 'y' }, { key: 'c', ctrlOrMeta: true }], run: () => copyCurrentEntries() },
   { id: 'paste', category: 'file', label: '粘贴到当前目录', keys: [{ key: 'p' }, { key: 'v', ctrlOrMeta: true }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
-  { id: 'undo', category: 'file', label: '撤销', keys: [{ key: 'z', ctrlOrMeta: true }], run: () => undoLastOperation(), disabled: () => !operationHistory.canUndo.value },
-  { id: 'redo', category: 'file', label: '重做', keys: [{ key: 'z', ctrlOrMeta: true, shift: true }, { key: 'y', ctrlOrMeta: true }], run: () => redoLastOperation(), disabled: () => !operationHistory.canRedo.value },
+  { id: 'undo', category: 'file', label: '撤销', keys: [{ key: 'z', ctrlOrMeta: true }], run: () => requestUndoOperation(), disabled: () => !operationHistory.canUndo.value },
+  { id: 'redo', category: 'file', label: '重做', keys: [{ key: 'z', ctrlOrMeta: true, shift: true }, { key: 'y', ctrlOrMeta: true }], run: () => requestRedoOperation(), disabled: () => !operationHistory.canRedo.value },
   { id: 'cut', category: 'file', label: '剪切当前项', keys: [{ key: 'x' }, { key: 'x', ctrlOrMeta: true }], run: () => cutCurrentEntries() },
   { id: 'rename', category: 'file', label: '重命名当前项', keys: [{ key: 'f2' }, { key: 'r' }], run: () => renameCurrentEntry() },
   { id: 'select-first', category: 'selection', label: '选择第一项', keys: [[{ key: 'g' }, { key: 'g' }]], run: () => selectFirstEntry() },
@@ -1335,7 +1389,7 @@ useKeyboardShortcuts(() => shortcutActions, {
             text
             :disabled="!operationHistory.canUndo.value"
             title="撤销"
-            @click="undoLastOperation"
+            @click="requestUndoOperation"
         >
           <template #icon>
             <n-icon><UndoSharp/></n-icon>
@@ -1345,7 +1399,7 @@ useKeyboardShortcuts(() => shortcutActions, {
             text
             :disabled="!operationHistory.canRedo.value"
             title="重做"
-            @click="redoLastOperation"
+            @click="requestRedoOperation"
         >
           <template #icon>
             <n-icon><RedoSharp/></n-icon>
@@ -1560,6 +1614,25 @@ useKeyboardShortcuts(() => shortcutActions, {
       </template>
     </NModal>
     <NModal
+      v-model:show="historyConfirmModal.show"
+      preset="card"
+      :title="`确认${historyConfirmActionLabel}`"
+      style="width: 360px"
+    >
+      <div class="modal-body">
+        <div>确定{{ historyConfirmActionLabel }}以下操作吗？</div>
+        <div class="history-operation-summary">{{ historyConfirmSummary?.sentence || '文件操作' }}</div>
+      </div>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="closeHistoryConfirmModal">取消</NButton>
+          <NButton type="primary" @click="confirmHistoryOperation">
+            {{ historyConfirmActionLabel }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+    <NModal
       v-model:show="shortcutHelpModal"
       preset="card"
       title="快捷键"
@@ -1708,6 +1781,11 @@ useKeyboardShortcuts(() => shortcutActions, {
 
 .modal-body {
   font-size: 13px;
+}
+
+.history-operation-summary {
+  margin-top: 8px;
+  font-weight: 600;
 }
 
 .drag-overlay {

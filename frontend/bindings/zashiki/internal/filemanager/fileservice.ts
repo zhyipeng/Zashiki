@@ -111,9 +111,9 @@ export function RenameEntry(path: string, name: string): $CancellablePromise<$mo
     });
 }
 
-export function TrashEntries(paths: string[]): $CancellablePromise<string[]> {
+export function TrashEntries(paths: string[]): $CancellablePromise<$models.EntryOperationResult[]> {
     return $Call.ByID(238716349, paths).then(($result: any) => {
-        return $$createType0($result);
+        return $$createType2($result);
     });
 }
 
