@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { NAlert, NButton, NEmpty, NInput, NModal, NSpin, NSpace, NTag } from 'naive-ui'
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
-import { formatPreviewSize, resolvePreviewRenderer } from './preview'
+import { formatPreviewSize, isFormattedJsonPreview, previewTextContent, resolvePreviewRenderer } from './preview'
 
 const props = defineProps<{
   show: boolean
@@ -24,6 +24,8 @@ const editMode = ref(false)
 const draftContent = ref('')
 const canEdit = computed(() => props.preview?.kind === 'text' && !props.preview.truncated && !props.loading && !props.error)
 const hasChanges = computed(() => draftContent.value !== (props.preview?.content || ''))
+const displayedTextContent = computed(() => previewTextContent(props.preview))
+const jsonFormatted = computed(() => isFormattedJsonPreview(props.preview))
 
 watch(() => props.preview, (preview) => {
   editMode.value = false
@@ -84,6 +86,7 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
         <span>{{ sizeText }}</span>
         <span v-if="preview?.mimeType">{{ preview.mimeType }}</span>
         <span v-if="preview?.truncated">已截断</span>
+        <span v-if="jsonFormatted">已格式化预览</span>
         <NSpace v-if="canEdit" class="preview-actions" size="small">
           <NButton v-if="!editMode" size="tiny" @click="enterEditMode">编辑</NButton>
           <template v-else>
@@ -115,7 +118,7 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
             @keydown.ctrl.s="saveEditFromKeyboard"
             @keydown.meta.s="saveEditFromKeyboard"
           />
-          <pre v-else-if="renderer.kind === 'text'" class="preview-text">{{ preview.content }}</pre>
+          <pre v-else-if="renderer.kind === 'text'" class="preview-text">{{ displayedTextContent }}</pre>
           <NEmpty v-else :description="preview.message || '暂不支持此文件类型预览'" />
         </template>
         <NEmpty v-else description="暂无预览" />

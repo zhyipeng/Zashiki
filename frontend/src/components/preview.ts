@@ -34,3 +34,27 @@ export function formatPreviewSize(bytes: number): string {
   if (index === 0) return `${bytes} B`
   return `${(bytes / 1024 ** index).toFixed(1)} ${units[index]}`
 }
+
+export function previewTextContent(preview: FilePreview | null | undefined): string {
+  if (!preview) return ''
+  if (!isJsonPreview(preview)) return preview.content
+  try {
+    const parsed = JSON.parse(preview.content)
+    const formatted = JSON.stringify(parsed, null, 2)
+    return formatted === undefined ? preview.content : formatted
+  } catch {
+    return preview.content
+  }
+}
+
+export function isFormattedJsonPreview(preview: FilePreview | null | undefined): boolean {
+  if (!preview || !isJsonPreview(preview)) return false
+  return previewTextContent(preview) !== preview.content
+}
+
+function isJsonPreview(preview: FilePreview): boolean {
+  if (preview.kind !== 'text') return false
+  const mimeType = preview.mimeType.toLowerCase()
+  if (mimeType === 'application/json' || mimeType.endsWith('+json')) return true
+  return preview.name.toLowerCase().endsWith('.json') || preview.path.toLowerCase().endsWith('.json')
+}
