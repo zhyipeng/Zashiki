@@ -21,7 +21,7 @@ let initPromise: Promise<void> | null = null
 export function initSettings(): Promise<void> {
   if (initPromise) return initPromise
 
-  initPromise = SettingsService.GetSettings().then((settings) => {
+  const promise = SettingsService.GetSettings().then((settings) => {
     state.showHiddenFiles = settings.showHiddenFiles
     state.themeMode = normalizeThemeMode(settings.themeMode)
     state.terminalProgram = settings.terminalProgram || ''
@@ -31,7 +31,8 @@ export function initSettings(): Promise<void> {
     loaded.value = true
   })
 
-  return initPromise
+  initPromise = promise
+  return promise
 }
 
 function normalizeThemeMode(value: unknown): ThemeMode {

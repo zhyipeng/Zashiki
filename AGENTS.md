@@ -7,9 +7,9 @@
 **重要：**
 - Wails 3 还处于 alpha 阶段，使用时应避免经验判断，而是根据文档和框架源码进行开发。
 - 开发时需优先考虑性能优化。
-- 尽可能覆盖测试用例。
+- 新增或修改代码应为其编写覆盖测试用例。
 - 考虑代码质量和可维护性。
-- 支持跨平台。
+- 做任何功能都需要考虑跨平台兼容性。
 
 ## 技术栈
 
@@ -95,6 +95,7 @@ bun run test:coverage # 覆盖率报告
 go test ./...                    # 运行所有测试
 go test -v -count=1 ./...        # 详细输出，禁用缓存
 go test -coverprofile=coverage.out ./...  # 覆盖率
+wails3 generate  # 生成 wails binding
 ```
 
 **约束**：

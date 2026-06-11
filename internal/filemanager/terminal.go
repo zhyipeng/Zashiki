@@ -21,6 +21,23 @@ func (f *FileService) OpenFile(path string) error {
 	}
 }
 
+func (f *FileService) OpenInFileManager(path string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", "-R", path).Start()
+	case "linux":
+		dir := path
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			dir = filepath.Dir(path)
+		}
+		return exec.Command("xdg-open", dir).Start()
+	case "windows":
+		return exec.Command("explorer", "/select,", path).Start()
+	default:
+		return exec.Command("open", path).Start()
+	}
+}
+
 func (f *FileService) OpenTerminal(path string, terminalProgram string) error {
 	dir, err := terminalDir(path)
 	if err != nil {

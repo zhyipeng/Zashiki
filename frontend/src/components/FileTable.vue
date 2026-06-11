@@ -131,7 +131,7 @@ const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 const sortState = ref<DataTableSortState | null>(null)
 const trashLabel = computed(() => props.trashLabel || '回收站')
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
-type ContextActionKey = 'new-folder' | 'open-terminal' | 'paste' | 'refresh' | 'open' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete'
+type ContextActionKey = 'new-folder' | 'open-terminal' | 'open-in-file-manager' | 'paste' | 'refresh' | 'open' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete'
 
 interface ContextMenuAction {
   key: ContextActionKey
@@ -188,6 +188,8 @@ watch([multiSelectMode, selectedRowKeys], () => {
   })
 }, { immediate: true })
 
+const isMacPlatform = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
+
 const contextMenuActions: ContextMenuAction[] = [
   {
     key: 'new-folder',
@@ -205,6 +207,15 @@ const contextMenuActions: ContextMenuAction[] = [
     run: async (target) => {
       if (target.kind !== 'blank') return
       await FileService.OpenTerminal(target.dir, settings.terminalProgram || '')
+    },
+  },
+  {
+    key: 'open-in-file-manager',
+    label: isMacPlatform ? '在访达中打开' : '在文件资源管理器中打开',
+    targets: ['blank', 'entry'],
+    run: async (target) => {
+      const path = target.kind === 'blank' ? target.dir : target.entry.path
+      await FileService.OpenInFileManager(path)
     },
   },
   {
