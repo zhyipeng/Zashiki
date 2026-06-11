@@ -197,6 +197,9 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .preview-editor {
