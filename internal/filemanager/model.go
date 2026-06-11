@@ -20,6 +20,7 @@ type FilePreview struct {
 	Kind      string `json:"kind"`
 	MimeType  string `json:"mimeType"`
 	Size      int64  `json:"size"`
+	Version   string `json:"version"`
 	Content   string `json:"content"`
 	DataURL   string `json:"dataUrl"`
 	Truncated bool   `json:"truncated"`

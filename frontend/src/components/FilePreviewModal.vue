@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { NAlert, NEmpty, NModal, NSpin, NTag } from 'naive-ui'
+import { computed, ref, watch } from 'vue'
+import { NAlert, NButton, NEmpty, NInput, NModal, NSpin, NSpace, NTag } from 'naive-ui'
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
 import { formatPreviewSize, resolvePreviewRenderer } from './preview'
 
@@ -14,14 +14,58 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:show': [show: boolean]
+  save: [content: string]
 }>()
 
 const renderer = computed(() => resolvePreviewRenderer(props.preview))
 const title = computed(() => props.entry?.name || '预览')
 const sizeText = computed(() => formatPreviewSize(props.preview?.size ?? props.entry?.size ?? 0))
+const editMode = ref(false)
+const draftContent = ref('')
+const canEdit = computed(() => props.preview?.kind === 'text' && !props.preview.truncated && !props.loading && !props.error)
+const hasChanges = computed(() => draftContent.value !== (props.preview?.content || ''))
+
+watch(() => props.preview, (preview) => {
+  editMode.value = false
+  draftContent.value = preview?.kind === 'text' ? preview.content : ''
+})
+
+watch(() => props.show, (show) => {
+  if (!show) {
+    editMode.value = false
+  }
+})
 
 function onUpdateShow(show: boolean) {
   emit('update:show', show)
+}
+
+function enterEditMode() {
+  if (editMode.value || !canEdit.value || !props.preview) return
+  draftContent.value = props.preview.content
+  editMode.value = true
+}
+
+function onPreviewStageDblclick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (editMode.value || target?.closest('textarea, input, button')) return
+  enterEditMode()
+}
+
+function cancelEditMode() {
+  draftContent.value = props.preview?.content || ''
+  editMode.value = false
+}
+
+function saveEdit() {
+  if (!canEdit.value || !hasChanges.value) return
+  emit('save', draftContent.value)
+}
+
+function saveEditFromKeyboard(event: KeyboardEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  saveEdit()
 }
 </script>
 
@@ -40,8 +84,19 @@ function onUpdateShow(show: boolean) {
         <span>{{ sizeText }}</span>
         <span v-if="preview?.mimeType">{{ preview.mimeType }}</span>
         <span v-if="preview?.truncated">已截断</span>
+        <NSpace v-if="canEdit" class="preview-actions" size="small">
+          <NButton v-if="!editMode" size="tiny" @click="enterEditMode">编辑</NButton>
+          <template v-else>
+            <NButton size="tiny" :disabled="loading" @click="cancelEditMode">取消</NButton>
+            <NButton size="tiny" type="primary" :loading="loading" :disabled="!hasChanges" @click="saveEdit">保存</NButton>
+          </template>
+        </NSpace>
       </div>
-      <div class="preview-stage">
+      <div
+        class="preview-stage"
+        :class="{ 'text-preview-stage': renderer.kind === 'text' }"
+        @dblclick="onPreviewStageDblclick"
+      >
         <NSpin v-if="loading" class="preview-spin" />
         <NAlert v-else-if="error" type="error" :title="error" />
         <template v-else-if="preview">
@@ -51,6 +106,15 @@ function onUpdateShow(show: boolean) {
             :src="preview.dataUrl"
             :alt="preview.name"
           >
+          <NInput
+            v-else-if="renderer.kind === 'text' && editMode"
+            v-model:value="draftContent"
+            class="preview-editor"
+            type="textarea"
+            :autosize="false"
+            @keydown.ctrl.s="saveEditFromKeyboard"
+            @keydown.meta.s="saveEditFromKeyboard"
+          />
           <pre v-else-if="renderer.kind === 'text'" class="preview-text">{{ preview.content }}</pre>
           <NEmpty v-else :description="preview.message || '暂不支持此文件类型预览'" />
         </template>
@@ -79,6 +143,10 @@ function onUpdateShow(show: boolean) {
   flex-wrap: wrap;
 }
 
+.preview-actions {
+  margin-left: auto;
+}
+
 .preview-stage {
   min-height: 320px;
   max-height: min(70vh, 720px);
@@ -89,6 +157,13 @@ function onUpdateShow(show: boolean) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.text-preview-stage {
+  height: min(68vh, 700px);
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
 }
 
 .preview-spin {
@@ -107,16 +182,35 @@ function onUpdateShow(show: boolean) {
 
 .preview-text {
   width: 100%;
-  min-height: 320px;
+  height: 100%;
   box-sizing: border-box;
   margin: 0;
   padding: 12px;
   align-self: stretch;
+  overflow: auto;
   color: var(--n-text-color);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.preview-editor {
+  align-self: stretch;
+  width: 100%;
+  height: 100%;
+}
+
+.preview-editor :deep(textarea) {
+  height: 100% !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.preview-editor :deep(.n-input-wrapper),
+.preview-editor :deep(.n-input__textarea) {
+  height: 100%;
 }
 </style>

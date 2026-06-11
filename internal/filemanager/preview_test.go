@@ -124,3 +124,61 @@ func TestFileService_GetFilePreview_Directory(t *testing.T) {
 		t.Fatal("Message should explain unsupported directory preview")
 	}
 }
+
+func TestFileService_SaveTextPreview(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(path, []byte("before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	preview, err := s.GetFilePreview(path)
+	if err != nil {
+		t.Fatalf("GetFilePreview() error = %v", err)
+	}
+
+	updated, err := s.SaveTextPreview(path, "after", preview.Version)
+	if err != nil {
+		t.Fatalf("SaveTextPreview() error = %v", err)
+	}
+
+	if updated.Kind != "text" || updated.Content != "after" {
+		t.Fatalf("SaveTextPreview() = %+v, want updated text preview", updated)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "after" {
+		t.Fatalf("file content = %q, want after", string(data))
+	}
+}
+
+func TestFileService_SaveTextPreviewRejectsChangedFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(path, []byte("before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	preview, err := s.GetFilePreview(path)
+	if err != nil {
+		t.Fatalf("GetFilePreview() error = %v", err)
+	}
+	if err := os.WriteFile(path, []byte("external"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.SaveTextPreview(path, "after", preview.Version); err == nil {
+		t.Fatal("SaveTextPreview() expected conflict error")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "external" {
+		t.Fatalf("file content = %q, want external", string(data))
+	}
+}

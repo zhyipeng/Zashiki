@@ -1368,6 +1368,35 @@ function onPreviewModalShow(show: boolean) {
   }
 }
 
+async function savePreviewContent(content: string) {
+  const preview = previewModal.value.preview
+  const entry = previewModal.value.entry
+  if (!preview || !entry || preview.kind !== 'text' || preview.truncated) return
+  previewModal.value.loading = true
+  previewModal.value.error = ''
+  try {
+    const updatedPreview = await FileService.SaveTextPreview(entry.path, content, preview.version)
+    previewModal.value.preview = updatedPreview
+    await refreshPreviewEntry(entry.path)
+    message.success('已保存')
+  } catch (err) {
+    console.error('SaveTextPreview failed:', entry.path, err)
+    previewModal.value.error = friendlyPreviewError(err)
+  } finally {
+    previewModal.value.loading = false
+  }
+}
+
+async function refreshPreviewEntry(path: string) {
+  try {
+    const entry = await FileService.GetFileInfo(path)
+    entries.value = entries.value.map(item => item.path === path ? entry : item)
+    previewModal.value.entry = entry
+  } catch (err) {
+    console.error('GetFileInfo after preview save failed:', path, err)
+  }
+}
+
 function friendlyPreviewError(err: unknown): string {
   const text = err instanceof Error ? err.message : String(err)
   const lower = text.toLowerCase()
@@ -1376,6 +1405,9 @@ function friendlyPreviewError(err: unknown): string {
   }
   if (lower.includes('no such file') || lower.includes('not found') || lower.includes('does not exist')) {
     return '文件不存在，无法预览'
+  }
+  if (lower.includes('changed since preview')) {
+    return '文件已被外部修改，请关闭预览后重新打开'
   }
   return `预览失败：${text}`
 }
@@ -1697,6 +1729,7 @@ useKeyboardShortcuts(() => shortcutActions, {
       :loading="previewModal.loading"
       :error="previewModal.error"
       @update:show="onPreviewModalShow"
+      @save="savePreviewContent"
     />
     <NModal
       v-model:show="createFolderModal.show"

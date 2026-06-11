@@ -3,6 +3,7 @@ package filemanager
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"mime"
 	"os"
@@ -22,6 +23,7 @@ type previewContext struct {
 	ext      string
 	mimeType string
 	size     int64
+	version  string
 }
 
 type previewProvider interface {
@@ -47,6 +49,7 @@ func (f *FileService) GetFilePreview(path string) (FilePreview, error) {
 		ext:      strings.ToLower(filepath.Ext(info.Name())),
 		mimeType: previewMimeType(info.Name()),
 		size:     info.Size(),
+		version:  previewVersion(info),
 	}
 
 	if info.IsDir() {
@@ -62,6 +65,23 @@ func (f *FileService) GetFilePreview(path string) (FilePreview, error) {
 	}
 
 	return unsupportedPreviewProvider{}.Build(ctx)
+}
+
+func (f *FileService) SaveTextPreview(path string, content string, expectedVersion string) (FilePreview, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return FilePreview{}, err
+	}
+	if info.IsDir() {
+		return FilePreview{}, fmt.Errorf("cannot edit directory %q", path)
+	}
+	if expectedVersion != "" && previewVersion(info) != expectedVersion {
+		return FilePreview{}, fmt.Errorf("file changed since preview was opened")
+	}
+	if err := os.WriteFile(path, []byte(content), info.Mode().Perm()); err != nil {
+		return FilePreview{}, err
+	}
+	return f.GetFilePreview(path)
 }
 
 type imagePreviewProvider struct{}
@@ -149,7 +169,12 @@ func baseFilePreview(ctx previewContext, kind string) FilePreview {
 		Kind:     kind,
 		MimeType: ctx.mimeType,
 		Size:     ctx.size,
+		Version:  ctx.version,
 	}
+}
+
+func previewVersion(info os.FileInfo) string {
+	return fmt.Sprintf("%d:%d", info.ModTime().UnixNano(), info.Size())
 }
 
 func readPreviewPrefix(path string, limit int) ([]byte, error) {

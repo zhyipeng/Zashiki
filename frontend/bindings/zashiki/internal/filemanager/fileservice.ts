@@ -125,6 +125,12 @@ export function RenameEntry(path: string, name: string): $CancellablePromise<$mo
     });
 }
 
+export function SaveTextPreview(path: string, content: string, expectedVersion: string): $CancellablePromise<$models.FilePreview> {
+    return $Call.ByID(840243591, path, content, expectedVersion).then(($result: any) => {
+        return $$createType4($result);
+    });
+}
+
 export function TrashEntries(paths: string[]): $CancellablePromise<$models.EntryOperationResult[]> {
     return $Call.ByID(238716349, paths).then(($result: any) => {
         return $$createType2($result);

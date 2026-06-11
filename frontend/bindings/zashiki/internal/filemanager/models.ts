@@ -126,6 +126,7 @@ export class FilePreview {
     "kind": string;
     "mimeType": string;
     "size": number;
+    "version": string;
     "content": string;
     "dataUrl": string;
     "truncated": boolean;
@@ -147,6 +148,9 @@ export class FilePreview {
         }
         if (!("size" in $$source)) {
             this["size"] = 0;
+        }
+        if (!("version" in $$source)) {
+            this["version"] = "";
         }
         if (!("content" in $$source)) {
             this["content"] = "";
