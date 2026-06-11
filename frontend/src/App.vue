@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {computed, ref, onMounted, onUnmounted, watch} from 'vue'
-import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider, NFlex, NButton, NIcon, darkTheme} from 'naive-ui'
+import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider, NButton, NIcon, darkTheme} from 'naive-ui'
 import Sidebar from './components/Sidebar.vue'
 import SplitNode from './components/SplitNode.vue'
 import {createLeaf, splitLeaf, closeLeaf, keepOnlyLeaf, navigateLeaf, getFirstLeafId, getLeafIds, findLeafById} from './components/tree'
@@ -9,10 +9,17 @@ import {FileService} from '../bindings/zashiki/internal/filemanager'
 import { Settings28Regular } from '@vicons/fluent'
 import SettingsModal from './components/SettingsModal.vue'
 import { useTheme } from './composables/useTheme'
+import { useFileClipboard } from './composables/useFileClipboard'
 
 const showSettings = ref(false)
 const { isDarkTheme, mountTheme } = useTheme()
+const fileClipboard = useFileClipboard()
 const naiveTheme = computed(() => isDarkTheme.value ? darkTheme : null)
+
+interface SelectionStatus {
+  multiSelectMode: boolean
+  selectedCount: number
+}
 
 const currentPath = ref('')
 const homeDir = ref('')
@@ -25,7 +32,22 @@ const error = ref('')
 let nextId = 1
 const rootNode = ref<TreeNode>(createLeaf(nextId++, ''))
 const focusedId = ref(1)
+const selectionStatusById = ref<Record<number, SelectionStatus>>({})
 let cleanupTheme: (() => void) | null = null
+
+const clipboardStatusText = computed(() => {
+  const clipboard = fileClipboard.clipboard.value
+  if (!clipboard || clipboard.paths.length === 0) return ''
+  const action = clipboard.mode === 'cut' ? '剪切' : '复制'
+  return `已${action} ${formatStatusTarget(clipboard.paths)}`
+})
+const focusedSelectionStatus = computed(() => selectionStatusById.value[focusedId.value] || null)
+const selectionStatusText = computed(() => {
+  const status = focusedSelectionStatus.value
+  if (!status?.multiSelectMode) return ''
+  return `已选择 ${status.selectedCount} 项`
+})
+const appStatusItems = computed(() => [clipboardStatusText.value, selectionStatusText.value].filter(Boolean))
 
 onMounted(async () => {
   cleanupTheme = mountTheme()
@@ -132,6 +154,13 @@ function handleFocusNextPanel(fromLeafId: number) {
   currentPath.value = leaf.path
 }
 
+function handleSelectionStatus(leafId: number, status: SelectionStatus) {
+  selectionStatusById.value = {
+    ...selectionStatusById.value,
+    [leafId]: status,
+  }
+}
+
 function onGlobalKeydown(event: KeyboardEvent) {
   if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
   if (isEditableTarget(event.target)) return
@@ -144,6 +173,20 @@ function isEditableTarget(target: EventTarget | null): boolean {
   const tag = target.tagName.toLowerCase()
   return tag === 'input' || tag === 'textarea' || target.isContentEditable
 }
+
+function formatStatusTarget(paths: string[]): string {
+  if (paths.length === 0) return ''
+  const firstName = basename(paths[0])
+  if (paths.length === 1) return `「${firstName}」`
+  return `「${firstName}」等 ${paths.length} 项`
+}
+
+function basename(path: string): string {
+  const slashIndex = path.lastIndexOf('/')
+  const backslashIndex = path.lastIndexOf('\\')
+  const index = Math.max(slashIndex, backslashIndex)
+  return index < 0 ? path : path.slice(index + 1)
+}
 </script>
 
 <template>
@@ -153,11 +196,20 @@ function isEditableTarget(target: EventTarget | null): boolean {
         <NSpin/>
       </div>
       <div v-else class="app-layout">
-        <n-flex class="app-header" justify="end">
+        <div class="app-header">
+          <div class="app-status-bar">
+            <span
+              v-for="item in appStatusItems"
+              :key="item"
+              class="app-status-item"
+            >
+              {{ item }}
+            </span>
+          </div>
           <n-button text style="font-size: 24px" @click="showSettings = true">
             <n-icon><Settings28Regular/></n-icon>
           </n-button>
-        </n-flex>
+        </div>
         <NDivider style="margin: 0" />
         <NSplit
             class="app-main-split"
@@ -194,6 +246,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
                   @close-others="handleCloseOthers"
                   @focus="handleFocus"
                   @focus-next="handleFocusNextPanel"
+                  @selection-status="handleSelectionStatus"
               />
             </div>
           </template>
@@ -256,6 +309,35 @@ html, body, #app {
   height: 40px;
   padding: 0 15px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.app-status-bar {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  color: var(--n-text-color-2);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.app-status-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-status-item + .app-status-item {
+  padding-left: 12px;
+  border-left: 1px solid var(--n-border-color);
 }
 
 .app-main-split {

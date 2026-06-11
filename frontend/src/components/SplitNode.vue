@@ -4,6 +4,11 @@ import FileTable from './FileTable.vue'
 import type { TreeNode } from './tree'
 import { isLeaf } from './tree'
 
+interface SelectionStatus {
+  multiSelectMode: boolean
+  selectedCount: number
+}
+
 defineProps<{
   node: TreeNode
   focusedId: number
@@ -20,6 +25,7 @@ const emit = defineEmits<{
   closeOthers: [id: number]
   focus: [id: number, path: string]
   focusNext: [id: number]
+  selectionStatus: [id: number, status: SelectionStatus]
 }>()
 
 // Our direction → NSplit direction:
@@ -51,6 +57,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
         @close="emit('close', node.id)"
         @close-others="emit('closeOthers', node.id)"
         @focus-next="emit('focusNext', node.id)"
+        @selection-status="(status: SelectionStatus) => emit('selectionStatus', node.id, status)"
       />
     </div>
     <NSplit
@@ -75,6 +82,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           @close-others="(id) => emit('closeOthers', id)"
           @focus="(id, path) => emit('focus', id, path)"
           @focus-next="(id) => emit('focusNext', id)"
+          @selection-status="(id, status) => emit('selectionStatus', id, status)"
         />
       </template>
       <template #[2]>
@@ -91,6 +99,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           @close-others="(id) => emit('closeOthers', id)"
           @focus="(id, path) => emit('focus', id, path)"
           @focus-next="(id) => emit('focusNext', id)"
+          @selection-status="(id, status) => emit('selectionStatus', id, status)"
         />
       </template>
     </NSplit>

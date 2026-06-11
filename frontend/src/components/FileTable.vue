@@ -117,6 +117,7 @@ const emit = defineEmits<{
   close: []
   closeOthers: []
   focusNext: []
+  selectionStatus: [status: { multiSelectMode: boolean, selectedCount: number }]
 }>()
 
 const entries = ref<FileEntry[]>([])
@@ -179,6 +180,13 @@ const historyConfirmSummary = computed(() => {
   return null
 })
 const shortcutHelpModal = ref(false)
+
+watch([multiSelectMode, selectedRowKeys], () => {
+  emit('selectionStatus', {
+    multiSelectMode: multiSelectMode.value,
+    selectedCount: selectedRowKeys.value.length,
+  })
+}, { immediate: true })
 
 const contextMenuActions: ContextMenuAction[] = [
   {
