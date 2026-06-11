@@ -12,6 +12,7 @@ import (
 type Settings struct {
 	ShowHiddenFiles bool   `json:"showHiddenFiles"`
 	ThemeMode       string `json:"themeMode"`
+	TerminalProgram string `json:"terminalProgram"`
 }
 
 type SettingsService struct {

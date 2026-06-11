@@ -97,8 +97,8 @@ export function OpenFile(path: string): $CancellablePromise<void> {
     return $Call.ByID(975761513, path);
 }
 
-export function OpenTerminal(path: string): $CancellablePromise<void> {
-    return $Call.ByID(2322032555, path);
+export function OpenTerminal(path: string, terminalProgram: string): $CancellablePromise<void> {
+    return $Call.ByID(2322032555, path, terminalProgram);
 }
 
 export function OpenTrash(): $CancellablePromise<void> {

@@ -204,7 +204,7 @@ const contextMenuActions: ContextMenuAction[] = [
     targets: ['blank'],
     run: async (target) => {
       if (target.kind !== 'blank') return
-      await FileService.OpenTerminal(target.dir)
+      await FileService.OpenTerminal(target.dir, settings.terminalProgram || '')
     },
   },
   {

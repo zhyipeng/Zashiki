@@ -21,7 +21,7 @@ func (f *FileService) OpenFile(path string) error {
 	}
 }
 
-func (f *FileService) OpenTerminal(path string) error {
+func (f *FileService) OpenTerminal(path string, terminalProgram string) error {
 	dir, err := terminalDir(path)
 	if err != nil {
 		return err
@@ -29,10 +29,22 @@ func (f *FileService) OpenTerminal(path string) error {
 
 	switch runtime.GOOS {
 	case "darwin":
-		return exec.Command("open", "-a", "Terminal", dir).Start()
+		app := "Terminal"
+		if terminalProgram != "" {
+			app = terminalProgram
+		}
+		return exec.Command("open", "-a", app, dir).Start()
 	case "linux":
+		if terminalProgram != "" {
+			return exec.Command(terminalProgram, "--working-directory", dir).Start()
+		}
 		return startLinuxTerminal(dir)
 	case "windows":
+		if terminalProgram != "" {
+			cmd := exec.Command(terminalProgram)
+			cmd.Dir = dir
+			return cmd.Start()
+		}
 		return exec.Command("cmd", "/C", "start", "", "cmd", "/K", "cd", "/d", dir).Start()
 	default:
 		return exec.Command("open", dir).Start()
