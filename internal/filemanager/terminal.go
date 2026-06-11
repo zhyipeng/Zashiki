@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 func (f *FileService) OpenFile(path string) error {
@@ -19,6 +20,13 @@ func (f *FileService) OpenFile(path string) error {
 	default:
 		return exec.Command("open", path).Start()
 	}
+}
+
+func (f *FileService) OpenWithEditor(path string, editorProgram string) error {
+	if strings.TrimSpace(editorProgram) == "" {
+		return fmt.Errorf("default editor is not configured")
+	}
+	return editorCommand(path, editorProgram).Start()
 }
 
 func (f *FileService) OpenInFileManager(path string) error {
@@ -36,6 +44,25 @@ func (f *FileService) OpenInFileManager(path string) error {
 	default:
 		return exec.Command("open", path).Start()
 	}
+}
+
+func editorCommand(path string, editorProgram string) *exec.Cmd {
+	editor := strings.TrimSpace(editorProgram)
+	if runtime.GOOS == "darwin" && isMacApplication(editor) {
+		return exec.Command("open", "-a", editor, path)
+	}
+	return exec.Command(editor, path)
+}
+
+func isMacApplication(editorProgram string) bool {
+	editor := strings.TrimSpace(editorProgram)
+	if editor == "" {
+		return false
+	}
+	if strings.HasSuffix(strings.ToLower(editor), ".app") {
+		return true
+	}
+	return !strings.ContainsAny(editor, `/\`)
 }
 
 func (f *FileService) OpenTerminal(path string, terminalProgram string) error {

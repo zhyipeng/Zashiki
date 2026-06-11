@@ -13,6 +13,7 @@ type Settings struct {
 	ShowHiddenFiles bool   `json:"showHiddenFiles"`
 	ThemeMode       string `json:"themeMode"`
 	TerminalProgram string `json:"terminalProgram"`
+	DefaultEditor   string `json:"defaultEditor"`
 }
 
 type SettingsService struct {

@@ -140,6 +140,11 @@ export function fileTypeLabel(entry: FileEntry): string {
   return '文件'
 }
 
+export function isTextFile(entry: FileEntry): boolean {
+  if (entry.isDir || entry.isExecutable || entry.isSymlink) return false
+  return textExtensions.has(fileExtension(entry.name))
+}
+
 export function fileExtension(name: string): string {
   const index = name.lastIndexOf('.')
   if (index <= 0 || index === name.length - 1) return ''

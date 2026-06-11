@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
-import { fileTypeLabel } from './fileIcons'
+import { fileTypeLabel, isTextFile } from './fileIcons'
 
 function entry(overrides: Partial<FileEntry>): FileEntry {
   return {
@@ -33,5 +33,13 @@ describe('fileTypeLabel', () => {
 
   it('labels extensionless files', () => {
     expect(fileTypeLabel(entry({ name: 'LICENSE' }))).toBe('文件')
+  })
+})
+
+describe('isTextFile', () => {
+  it('matches known text extensions only for files', () => {
+    expect(isTextFile(entry({ name: 'README.md' }))).toBe(true)
+    expect(isTextFile(entry({ name: 'archive.zip' }))).toBe(false)
+    expect(isTextFile(entry({ name: 'notes.md', isDir: true }))).toBe(false)
   })
 })

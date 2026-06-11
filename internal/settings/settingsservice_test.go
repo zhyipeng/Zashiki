@@ -24,11 +24,14 @@ func TestSettingsService_GetSettings_Default(t *testing.T) {
 	if settings.ThemeMode != "system" {
 		t.Errorf("expected ThemeMode=system by default, got %q", settings.ThemeMode)
 	}
+	if settings.DefaultEditor != "" {
+		t.Errorf("expected DefaultEditor to default to empty, got %q", settings.DefaultEditor)
+	}
 }
 
 func TestSettingsService_SaveAndGet(t *testing.T) {
 	svc := newTestService(t)
-	original := Settings{ShowHiddenFiles: true, ThemeMode: "dark"}
+	original := Settings{ShowHiddenFiles: true, ThemeMode: "dark", TerminalProgram: "Terminal", DefaultEditor: "code"}
 	if err := svc.SaveSettings(original); err != nil {
 		t.Fatalf("SaveSettings() failed: %v", err)
 	}
@@ -42,6 +45,12 @@ func TestSettingsService_SaveAndGet(t *testing.T) {
 	}
 	if loaded.ThemeMode != "dark" {
 		t.Errorf("expected ThemeMode=dark, got %q", loaded.ThemeMode)
+	}
+	if loaded.TerminalProgram != "Terminal" {
+		t.Errorf("expected TerminalProgram=Terminal, got %q", loaded.TerminalProgram)
+	}
+	if loaded.DefaultEditor != "code" {
+		t.Errorf("expected DefaultEditor=code, got %q", loaded.DefaultEditor)
 	}
 }
 

@@ -32,6 +32,19 @@ async function browseTerminalProgram() {
     updateSetting('terminalProgram', path)
   }
 }
+
+async function browseDefaultEditor() {
+  const result = await Dialogs.OpenFile({
+    Title: '选择默认编辑器',
+    CanChooseFiles: true,
+    CanChooseDirectories: false,
+    TreatsFilePackagesAsDirectories: false,
+  })
+  const path = Array.isArray(result) ? result[0] : result
+  if (path) {
+    updateSetting('defaultEditor', path)
+  }
+}
 </script>
 
 <template>
@@ -59,7 +72,7 @@ async function browseTerminalProgram() {
     </div>
     <div class="setting-item">
       <span class="setting-label">默认终端程序</span>
-      <div class="terminal-input-group">
+      <div class="program-input-group">
         <NInput
           :value="settings.terminalProgram"
           @update:value="(val: string) => updateSetting('terminalProgram', val)"
@@ -68,6 +81,19 @@ async function browseTerminalProgram() {
           size="small"
         />
         <NButton size="small" @click="browseTerminalProgram">浏览</NButton>
+      </div>
+    </div>
+    <div class="setting-item">
+      <span class="setting-label">默认编辑器</span>
+      <div class="program-input-group">
+        <NInput
+          :value="settings.defaultEditor"
+          @update:value="(val: string) => updateSetting('defaultEditor', val)"
+          placeholder="Visual Studio Code"
+          style="width: 280px"
+          size="small"
+        />
+        <NButton size="small" @click="browseDefaultEditor">浏览</NButton>
       </div>
     </div>
   </NModal>
@@ -86,7 +112,7 @@ async function browseTerminalProgram() {
   flex-shrink: 0;
 }
 
-.terminal-input-group {
+.program-input-group {
   display: flex;
   align-items: center;
   gap: 8px;

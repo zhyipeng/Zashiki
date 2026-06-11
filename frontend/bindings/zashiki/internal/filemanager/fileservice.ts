@@ -109,6 +109,10 @@ export function OpenTrash(): $CancellablePromise<void> {
     return $Call.ByID(2720739683);
 }
 
+export function OpenWithEditor(path: string, editorProgram: string): $CancellablePromise<void> {
+    return $Call.ByID(569889906, path, editorProgram);
+}
+
 export function RenameEntry(path: string, name: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(1533604623, path, name).then(($result: any) => {
         return $$createType3($result);

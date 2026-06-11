@@ -20,7 +20,7 @@ import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
 import { notifyDirectoriesChanged, useDirectoryEvents } from '../composables/useDirectoryEvents'
 import { useFileOperationHistory } from '../composables/useFileOperationHistory'
 import DropConfirmModal from './DropConfirmModal.vue'
-import { fileTypeLabel, resolveFileIcon } from './fileIcons'
+import { fileTypeLabel, isTextFile, resolveFileIcon } from './fileIcons'
 import { joinPath, parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
@@ -131,12 +131,13 @@ const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 const sortState = ref<DataTableSortState | null>(null)
 const trashLabel = computed(() => props.trashLabel || '回收站')
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
-type ContextActionKey = 'new-folder' | 'open-terminal' | 'open-in-file-manager' | 'paste' | 'refresh' | 'open' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete'
+type ContextActionKey = 'new-folder' | 'open-terminal' | 'open-in-file-manager' | 'paste' | 'refresh' | 'open' | 'open-with-editor' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete'
 
 interface ContextMenuAction {
   key: ContextActionKey
-  label: string
+  label: string | ((target: ContextTarget) => string)
   targets: ContextTarget['kind'][]
+  visible?: (target: ContextTarget) => boolean
   disabled?: (target: ContextTarget) => boolean
   run: (target: ContextTarget) => Promise<void> | void
 }
@@ -192,12 +193,26 @@ const isMacPlatform = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
 
 const contextMenuActions: ContextMenuAction[] = [
   {
-    key: 'new-folder',
-    label: '新建文件夹',
-    targets: ['blank'],
-    run: (target) => {
-      if (target.kind !== 'blank') return
-      openCreateFolderModal(target.dir)
+    key: 'open',
+    label: '打开',
+    targets: ['entry'],
+    run: async (target) => {
+      if (target.kind !== 'entry') return
+      await openEntries(operationEntriesForEntry(target.entry))
+    },
+  },
+  {
+    key: 'open-with-editor',
+    label: () => `使用 ${defaultEditorDisplayName()} 打开`,
+    targets: ['entry'],
+    visible: (target) => target.kind === 'entry' && canOpenWithDefaultEditor(target.entry),
+    run: async (target) => {
+      if (target.kind !== 'entry') return
+      const editor = settings.defaultEditor.trim()
+      const entries = editorEntriesForTarget(target.entry)
+      for (const entry of entries) {
+        await FileService.OpenWithEditor(entry.path, editor)
+      }
     },
   },
   {
@@ -219,13 +234,12 @@ const contextMenuActions: ContextMenuAction[] = [
     },
   },
   {
-    key: 'paste',
-    label: '粘贴',
+    key: 'new-folder',
+    label: '新建文件夹',
     targets: ['blank'],
-    disabled: () => !fileClipboard.hasClipboard.value,
-    run: async (target) => {
-      if (target.kind !== 'blank' || !fileClipboard.clipboard.value) return
-      await pasteClipboardEntriesToDir(target.dir)
+    run: (target) => {
+      if (target.kind !== 'blank') return
+      openCreateFolderModal(target.dir)
     },
   },
   {
@@ -233,15 +247,6 @@ const contextMenuActions: ContextMenuAction[] = [
     label: '刷新',
     targets: ['blank'],
     run: () => refresh(),
-  },
-  {
-    key: 'open',
-    label: '打开',
-    targets: ['entry'],
-    run: async (target) => {
-      if (target.kind !== 'entry') return
-      await openEntries(operationEntriesForEntry(target.entry))
-    },
   },
   {
     key: 'rename',
@@ -285,6 +290,16 @@ const contextMenuActions: ContextMenuAction[] = [
     },
   },
   {
+    key: 'paste',
+    label: '粘贴',
+    targets: ['blank'],
+    disabled: () => !fileClipboard.hasClipboard.value,
+    run: async (target) => {
+      if (target.kind !== 'blank' || !fileClipboard.clipboard.value) return
+      await pasteClipboardEntriesToDir(target.dir)
+    },
+  },
+  {
     key: 'delete',
     label: '删除',
     targets: ['entry'],
@@ -300,12 +315,39 @@ const contextMenuOptions = computed<DropdownOption[]>(() => {
   if (!target) return []
   return contextMenuActions
     .filter(action => action.targets.includes(target.kind))
+    .filter(action => action.visible?.(target) ?? true)
     .map(action => ({
-      label: action.label,
+      label: typeof action.label === 'function' ? action.label(target) : action.label,
       key: action.key,
       disabled: action.disabled?.(target) || false,
     }))
 })
+
+function defaultEditorDisplayName(): string {
+  const editor = settings.defaultEditor.trim()
+  const normalized = editor.replace(/[\\/]+$/, '')
+  const name = normalized.split(/[\\/]/).pop() || normalized
+  return name.replace(/\.app$/i, '').replace(/\.exe$/i, '') || editor
+}
+
+function canOpenWithDefaultEditor(entry: FileEntry): boolean {
+  if (!settings.defaultEditor.trim()) return false
+  const entries = editorEntriesForTarget(entry)
+  return entries.length > 0 && entries.every(isEditorOpenableEntry)
+}
+
+function isEditorOpenableEntry(entry: FileEntry): boolean {
+  return entry.isDir || isTextFile(entry)
+}
+
+function editorEntriesForTarget(entry: FileEntry): FileEntry[] {
+  if (isParentEntry(entry)) return []
+  if (multiSelectMode.value && selectedPathSet.value.has(entry.path)) {
+    const selected = selectedEntries()
+    if (selected.length > 0) return selected
+  }
+  return [entry]
+}
 
 function friendlyError(err: unknown, p: string): string {
   const msg = String(err).toLowerCase()

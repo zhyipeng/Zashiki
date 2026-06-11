@@ -9,6 +9,7 @@ export class Settings {
     "showHiddenFiles": boolean;
     "themeMode": string;
     "terminalProgram": string;
+    "defaultEditor": string;
 
     /** Creates a new Settings instance. */
     constructor($$source: Partial<Settings> = {}) {
@@ -20,6 +21,9 @@ export class Settings {
         }
         if (!("terminalProgram" in $$source)) {
             this["terminalProgram"] = "";
+        }
+        if (!("defaultEditor" in $$source)) {
+            this["defaultEditor"] = "";
         }
 
         Object.assign(this, $$source);

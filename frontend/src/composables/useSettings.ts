@@ -7,12 +7,14 @@ export interface Settings {
   showHiddenFiles: boolean
   themeMode: ThemeMode
   terminalProgram: string
+  defaultEditor: string
 }
 
 const state = reactive<Settings>({
   showHiddenFiles: false,
   themeMode: 'system',
   terminalProgram: '',
+  defaultEditor: '',
 })
 
 const loaded = ref(false)
@@ -25,6 +27,7 @@ export function initSettings(): Promise<void> {
     state.showHiddenFiles = settings.showHiddenFiles
     state.themeMode = normalizeThemeMode(settings.themeMode)
     state.terminalProgram = settings.terminalProgram || ''
+    state.defaultEditor = settings.defaultEditor || ''
     loaded.value = true
   }).catch((err) => {
     console.error('Failed to load settings:', err)
