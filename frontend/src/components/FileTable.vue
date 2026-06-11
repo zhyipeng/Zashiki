@@ -1442,10 +1442,10 @@ async function redoLastOperation() {
 }
 
 const shortcutActions: CategorizedShortcutAction[] = [
-  { id: 'select-next', category: 'selection', label: '选择下一项', keys: [{ key: 'j' }], run: () => selectEntryByOffset(1) },
-  { id: 'select-prev', category: 'selection', label: '选择上一项', keys: [{ key: 'k' }], run: () => selectEntryByOffset(-1) },
-  { id: 'go-up', category: 'navigation', label: '返回上级目录', keys: [{ key: 'h' }], run: () => goUp(), disabled: () => !canGoUp.value },
-  { id: 'open', category: 'file', label: '打开当前项', keys: [{ key: 'l' }], run: () => openCurrentEntry() },
+  { id: 'select-next', category: 'selection', label: '选择下一项', keys: [{ key: 'j' }, { key: 'arrowdown' }], run: () => selectEntryByOffset(1) },
+  { id: 'select-prev', category: 'selection', label: '选择上一项', keys: [{ key: 'k' }, { key: 'arrowup' }], run: () => selectEntryByOffset(-1) },
+  { id: 'go-up', category: 'navigation', label: '返回上级目录', keys: [{ key: 'h' }, { key: 'arrowleft' }], run: () => goUp(), disabled: () => !canGoUp.value },
+  { id: 'open', category: 'file', label: '打开当前项', keys: [{ key: 'l' }, { key: 'arrowright' }], run: () => openCurrentEntry() },
   { id: 'preview', category: 'file', label: '预览当前项', keys: [{ key: 'space' }], run: () => handlePreviewShortcut(), disabled: () => multiSelectMode.value && !previewModal.value.show },
   { id: 'toggle-search', category: 'search', label: '切换搜索栏', keys: [{ key: '/' }, { key: 'f', ctrlOrMeta: true, allowInEditable: true }], run: () => toggleSearch() },
   { id: 'escape', category: 'dialog', label: '退出搜索/多选/弹窗', keys: [{ key: 'escape' }], run: () => handleEscapeShortcut(), allowInEditable: true },
