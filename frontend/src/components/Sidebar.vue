@@ -1,19 +1,35 @@
 <script setup lang="ts">
-import { computed, h, ref, watch } from 'vue'
-import { NTree, NDivider, NText, NSplit, NIcon, useMessage } from 'naive-ui'
-import type { TreeOption } from 'naive-ui'
-import { DeleteOutlined, FolderOutlined } from '@vicons/material'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { NTree, NText, NSplit, NIcon, NDropdown, useMessage } from 'naive-ui'
+import type { DropdownOption, TreeOption } from 'naive-ui'
+import { DeleteOutlined, FolderOutlined, FolderSpecialOutlined } from '@vicons/material'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { useSettings } from '../composables/useSettings'
+import { FILE_EXPLORER_DRAG_MIME, activeDragPaths, clearDrag, finishDragDrop, hasActiveDragPayload, startFileExplorerDrag } from '../composables/useDragDrop'
 import { useDirectoryChangeListener } from '../composables/useDirectoryEvents'
-import { ancestorPaths, joinPath, pathRoot } from './path'
+import { ancestorPaths, baseName, joinPath, pathRoot } from './path'
 
 type RootInfo = { name: string, path: string, freeSpace: number, totalSpace: number }
 type TrashInfo = { label: string, path: string, available: boolean }
-type QuickAccessItem = { label: string, path: string, isTrash?: boolean }
+type QuickAccessItem = { label: string, path: string, isTrash?: boolean, isPinned?: boolean }
 
-const { settings } = useSettings()
+const { settings, updateSetting } = useSettings()
 const message = useMessage()
+const quickAccessRef = ref<HTMLElement | null>(null)
+const quickAccessDragOver = ref(false)
+const lastDragPoint = ref({ x: 0, y: 0 })
+const quickAccessContextMenu = ref({
+  show: false,
+  x: 0,
+  y: 0,
+  item: null as QuickAccessItem | null,
+})
+const quickAccessContextOptions: DropdownOption[] = [
+  {
+    label: '从快速访问删除',
+    key: 'remove-pinned',
+  },
+]
 
 const props = defineProps<{
   currentPath: string
@@ -30,6 +46,16 @@ const emit = defineEmits<{
 const treeData = ref<TreeOption[]>([])
 const expandedKeys = ref<string[]>([])
 const rootByPath = computed(() => new Map(props.roots.map(root => [root.path, root])))
+
+onMounted(() => {
+  window.addEventListener('dragover', onWindowDragOver)
+  window.addEventListener('dragend', onWindowDragEnd)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('dragover', onWindowDragOver)
+  window.removeEventListener('dragend', onWindowDragEnd)
+})
 
 watch(() => [props.homeDir, props.separator, props.roots] as const, ([home, separator, roots]) => {
   const homeRoot = home ? pathRoot(home, separator) : ''
@@ -151,6 +177,15 @@ function onUpdateSelectedKeys(keys: string[]) {
   }
 }
 
+function treeNodeProps({ option }: { option: TreeOption }) {
+  const path = typeof option.key === 'string' ? option.key : String(option.key)
+  return {
+    draggable: true,
+    onDragstart: (e: DragEvent) => startFileExplorerDrag(e, [path], path),
+    onDragend: () => clearDrag(),
+  }
+}
+
 const quickAccess = computed(() => {
   const h = props.homeDir
   if (!h) return []
@@ -163,8 +198,13 @@ const quickAccess = computed(() => {
   if (props.trashInfo.available) {
     items.push({ label: props.trashInfo.label || '回收站', path: props.trashInfo.path, isTrash: true })
   }
+  for (const path of settings.pinnedQuickAccessPaths) {
+    items.push({ label: baseName(path, props.separator), path, isPinned: true })
+  }
   return items
 })
+
+const quickAccessHeight = computed(() => `${38 * quickAccess.value.length}px`)
 
 async function onQuickAccessClick(item: QuickAccessItem) {
   if (item.path) {
@@ -179,6 +219,158 @@ async function onQuickAccessClick(item: QuickAccessItem) {
     }
   }
 }
+
+function rememberDragPoint(e: DragEvent) {
+  lastDragPoint.value = { x: e.clientX, y: e.clientY }
+}
+
+function onQuickAccessDragOver(e: DragEvent) {
+  if (!hasQuickAccessDropPayload(e)) return
+  e.preventDefault()
+  rememberDragPoint(e)
+  quickAccessDragOver.value = true
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'link'
+  }
+}
+
+function onQuickAccessDragEnter(e: DragEvent) {
+  if (!hasQuickAccessDropPayload(e)) return
+  e.preventDefault()
+  rememberDragPoint(e)
+  quickAccessDragOver.value = true
+}
+
+function onQuickAccessDragLeave(e: DragEvent) {
+  if ((e.currentTarget as HTMLElement)?.contains(e.relatedTarget as HTMLElement)) return
+  quickAccessDragOver.value = false
+}
+
+async function onQuickAccessDrop(e: DragEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  rememberDragPoint(e)
+  quickAccessDragOver.value = false
+  const paths = quickAccessDropPaths(e)
+  if (paths.length === 0) {
+    finishDragDrop()
+    return
+  }
+
+  await pinQuickAccessPaths(paths)
+}
+
+async function onWindowDragEnd() {
+  if (!quickAccessDragOver.value && !isLastDragPointInQuickAccess()) return
+  quickAccessDragOver.value = false
+  const paths = activeDragPaths()
+  if (paths.length === 0) {
+    finishDragDrop()
+    return
+  }
+  await pinQuickAccessPaths(paths)
+}
+
+function onWindowDragOver(e: DragEvent) {
+  if (!hasActiveDragPayload()) return
+  rememberDragPoint(e)
+}
+
+function isLastDragPointInQuickAccess(): boolean {
+  const el = quickAccessRef.value
+  if (!el) return false
+  const rect = el.getBoundingClientRect()
+  const { x, y } = lastDragPoint.value
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+}
+
+async function pinQuickAccessPaths(paths: string[]) {
+  const nextPaths = [...settings.pinnedQuickAccessPaths]
+  let added = 0
+  for (const path of paths) {
+    if (nextPaths.includes(path) || isBuiltInQuickAccessPath(path)) continue
+    try {
+      const info = await FileService.GetFileInfo(path)
+      if (!info.isDir) continue
+      nextPaths.push(path)
+      added++
+    } catch (err) {
+      console.error('Pin quick access failed:', path, err)
+    }
+  }
+
+  if (added === 0) {
+    finishDragDrop()
+    return
+  }
+  persistPinnedQuickAccess(nextPaths)
+  finishDragDrop()
+  message.success(added > 1 ? `已固定 ${added} 个文件夹` : '已固定到快速访问')
+}
+
+function hasQuickAccessDropPayload(e: DragEvent): boolean {
+  const types = Array.from(e.dataTransfer?.types || [])
+  return hasActiveDragPayload() || types.includes(FILE_EXPLORER_DRAG_MIME) || types.includes('Files')
+}
+
+function quickAccessDropPaths(e: DragEvent): string[] {
+  const activePaths = activeDragPaths()
+  if (activePaths.length > 0) return activePaths
+
+  const payload = e.dataTransfer?.getData(FILE_EXPLORER_DRAG_MIME) || e.dataTransfer?.getData('text/plain')
+  if (payload) {
+    try {
+      const parsed = JSON.parse(payload)
+      if (Array.isArray(parsed?.paths)) {
+        return parsed.paths.filter((path: unknown): path is string => typeof path === 'string' && path.length > 0)
+      }
+    } catch {
+      return []
+    }
+  }
+
+  const paths: string[] = []
+  const files = e.dataTransfer?.files
+  if (!files) return paths
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i] as any
+    if (file.path) paths.push(file.path)
+  }
+  return paths
+}
+
+function isBuiltInQuickAccessPath(path: string): boolean {
+  return quickAccess.value.some(item => !item.isPinned && item.path === path)
+}
+
+function showQuickAccessContextMenu(e: MouseEvent, item: QuickAccessItem) {
+  if (!item.isPinned) return
+  e.preventDefault()
+  quickAccessContextMenu.value = {
+    show: false,
+    x: e.clientX,
+    y: e.clientY,
+    item,
+  }
+  requestAnimationFrame(() => {
+    quickAccessContextMenu.value.show = true
+  })
+}
+
+function hideQuickAccessContextMenu() {
+  quickAccessContextMenu.value.show = false
+}
+
+function onQuickAccessContextSelect(key: string | number) {
+  const item = quickAccessContextMenu.value.item
+  hideQuickAccessContextMenu()
+  if (key !== 'remove-pinned' || !item?.isPinned) return
+  persistPinnedQuickAccess(settings.pinnedQuickAccessPaths.filter(path => path !== item.path))
+}
+
+function persistPinnedQuickAccess(paths: string[]) {
+  updateSetting('pinnedQuickAccessPaths', [...paths])
+}
 </script>
 
 <template>
@@ -186,26 +378,43 @@ async function onQuickAccessClick(item: QuickAccessItem) {
     <NSplit
       class="sidebar-split"
       direction="vertical"
-      :default-size="'200px'"
-      :min="'80px'"
-      :max="'300px'"
+      :size="quickAccessHeight"
       :resize-trigger-size="3"
     >
       <template #[1]>
-        <div class="quick-access">
+        <div
+          ref="quickAccessRef"
+          class="quick-access"
+          :class="{ 'drag-over': quickAccessDragOver }"
+          @dragover="onQuickAccessDragOver"
+          @dragenter="onQuickAccessDragEnter"
+          @dragleave="onQuickAccessDragLeave"
+          @drop="onQuickAccessDrop"
+        >
           <NText depth="3" class="section-title">快速访问</NText>
           <div
             v-for="item in quickAccess"
             :key="item.isTrash ? 'trash' : item.path"
             class="quick-item"
-            :class="{ active: item.path && currentPath === item.path }"
+            :class="{ active: item.path && currentPath === item.path, pinned: item.isPinned }"
             @click="onQuickAccessClick(item)"
+            @contextmenu.stop="showQuickAccessContextMenu($event, item)"
           >
-            <NIcon class="quick-icon" :size="16" color="#D99A22">
-              <component :is="item.isTrash ? DeleteOutlined : FolderOutlined"/>
+            <NIcon class="quick-icon" :size="16" :color="item.isPinned ? '#4B7BEC' : '#D99A22'">
+              <component :is="item.isTrash ? DeleteOutlined : item.isPinned ? FolderSpecialOutlined : FolderOutlined"/>
             </NIcon>
             <span class="quick-label">{{ item.label }}</span>
           </div>
+          <NDropdown
+            trigger="manual"
+            placement="bottom-start"
+            :show="quickAccessContextMenu.show"
+            :x="quickAccessContextMenu.x"
+            :y="quickAccessContextMenu.y"
+            :options="quickAccessContextOptions"
+            @select="onQuickAccessContextSelect"
+            @clickoutside="hideQuickAccessContextMenu"
+          />
         </div>
       </template>
       <template #[2]>
@@ -217,6 +426,7 @@ async function onQuickAccessClick(item: QuickAccessItem) {
             :remote="true"
             :on-load="onLoad"
             :render-label="renderTreeLabel"
+            :node-props="treeNodeProps"
             :on-update:expanded-keys="onUpdateExpandedKeys"
             :on-update:selected-keys="onUpdateSelectedKeys"
             block-line
@@ -258,6 +468,20 @@ async function onQuickAccessClick(item: QuickAccessItem) {
 
 .quick-item.active {
   background-color: var(--n-color-selected);
+}
+
+.quick-access {
+  height: 100%;
+}
+
+.quick-access.drag-over {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.08);
+  outline: 1px dashed var(--n-primary-color, #18a058);
+  outline-offset: -3px;
+}
+
+.quick-item.pinned .quick-label {
+  font-weight: 500;
 }
 
 .quick-icon {

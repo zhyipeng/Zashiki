@@ -10,6 +10,7 @@ export class Settings {
     "themeMode": string;
     "terminalProgram": string;
     "defaultEditor": string;
+    "pinnedQuickAccessPaths": string[];
 
     /** Creates a new Settings instance. */
     constructor($$source: Partial<Settings> = {}) {
@@ -25,6 +26,9 @@ export class Settings {
         if (!("defaultEditor" in $$source)) {
             this["defaultEditor"] = "";
         }
+        if (!("pinnedQuickAccessPaths" in $$source)) {
+            this["pinnedQuickAccessPaths"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -33,7 +37,14 @@ export class Settings {
      * Creates a new Settings instance from a string or object.
      */
     static createFrom($$source: any = {}): Settings {
+        const $$createField4_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("pinnedQuickAccessPaths" in $$parsedSource) {
+            $$parsedSource["pinnedQuickAccessPaths"] = $$createField4_0($$parsedSource["pinnedQuickAccessPaths"]);
+        }
         return new Settings($$parsedSource as Partial<Settings>);
     }
 }
+
+// Private type creation functions
+const $$createType0 = $Create.Array($Create.Any);

@@ -4,7 +4,7 @@ import type { EntryOperationResult, FileEntry } from '../../bindings/zashiki/int
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { notifyDirectoriesChanged } from './useDirectoryEvents'
 
-const DRAG_MIME = 'application/x-file-explorer-paths'
+export const FILE_EXPLORER_DRAG_MIME = 'application/x-file-explorer-paths'
 
 interface DragPayload {
   paths: string[]
@@ -26,8 +26,13 @@ const dragPayload = ref<DragPayload | null>(null)
 const hoveredFolderPath = ref('')
 const pendingDrop = ref<PendingDrop | null>(null)
 const dragOverRefs = new Set<{ value: boolean }>()
+let dragCleanupTimer: number | null = null
 
 function dragCleanup() {
+  if (dragCleanupTimer !== null) {
+    window.clearTimeout(dragCleanupTimer)
+    dragCleanupTimer = null
+  }
   dragPayload.value = null
   hoveredFolderPath.value = ''
   for (const r of dragOverRefs) {
@@ -36,7 +41,42 @@ function dragCleanup() {
 }
 
 export function clearDrag() {
+  scheduleDragCleanup()
+}
+
+export function finishDragDrop() {
   dragCleanup()
+}
+
+export function activeDragPaths(): string[] {
+  return dragPayload.value?.paths || []
+}
+
+export function hasActiveDragPayload(): boolean {
+  return !!dragPayload.value
+}
+
+export function startFileExplorerDrag(e: DragEvent, paths: string[], sourcePanel = '') {
+  if (paths.length === 0 || !e.dataTransfer) return
+  const payload: DragPayload = {
+    paths,
+    sourcePanel,
+  }
+  dragPayload.value = payload
+  hoveredFolderPath.value = ''
+  const serialized = JSON.stringify(payload)
+  e.dataTransfer.setData(FILE_EXPLORER_DRAG_MIME, serialized)
+  e.dataTransfer.setData('text/plain', serialized)
+  e.dataTransfer.effectAllowed = 'all'
+}
+
+function scheduleDragCleanup() {
+  if (dragCleanupTimer !== null) {
+    window.clearTimeout(dragCleanupTimer)
+  }
+  dragCleanupTimer = window.setTimeout(() => {
+    dragCleanup()
+  }, 800)
 }
 
 export function useDragDrop(currentPath: () => string, options: DragDropOptions = {}) {
@@ -50,14 +90,7 @@ export function useDragDrop(currentPath: () => string, options: DragDropOptions 
   // ---- drag source ----
 
   function onRowDragStart(e: DragEvent, entry: FileEntry, paths?: string[]) {
-    const payload: DragPayload = {
-      paths: paths && paths.length > 0 ? paths : [entry.path],
-      sourcePanel: currentPath(),
-    }
-    dragPayload.value = payload
-    hoveredFolderPath.value = ''
-    e.dataTransfer!.setData(DRAG_MIME, JSON.stringify(payload))
-    e.dataTransfer!.effectAllowed = 'all'
+    startFileExplorerDrag(e, paths && paths.length > 0 ? paths : [entry.path], currentPath())
   }
 
   // ---- helpers ----

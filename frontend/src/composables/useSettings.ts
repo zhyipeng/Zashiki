@@ -8,6 +8,7 @@ export interface Settings {
   themeMode: ThemeMode
   terminalProgram: string
   defaultEditor: string
+  pinnedQuickAccessPaths: string[]
 }
 
 const state = reactive<Settings>({
@@ -15,6 +16,7 @@ const state = reactive<Settings>({
   themeMode: 'system',
   terminalProgram: '',
   defaultEditor: '',
+  pinnedQuickAccessPaths: [],
 })
 
 const loaded = ref(false)
@@ -28,6 +30,9 @@ export function initSettings(): Promise<void> {
     state.themeMode = normalizeThemeMode(settings.themeMode)
     state.terminalProgram = settings.terminalProgram || ''
     state.defaultEditor = settings.defaultEditor || ''
+    state.pinnedQuickAccessPaths = Array.isArray(settings.pinnedQuickAccessPaths)
+      ? settings.pinnedQuickAccessPaths.filter((path): path is string => typeof path === 'string' && path.length > 0)
+      : []
     loaded.value = true
   }).catch((err) => {
     console.error('Failed to load settings:', err)

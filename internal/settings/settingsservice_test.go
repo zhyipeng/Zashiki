@@ -27,11 +27,20 @@ func TestSettingsService_GetSettings_Default(t *testing.T) {
 	if settings.DefaultEditor != "" {
 		t.Errorf("expected DefaultEditor to default to empty, got %q", settings.DefaultEditor)
 	}
+	if len(settings.PinnedQuickAccessPaths) != 0 {
+		t.Errorf("expected PinnedQuickAccessPaths to default to empty, got %v", settings.PinnedQuickAccessPaths)
+	}
 }
 
 func TestSettingsService_SaveAndGet(t *testing.T) {
 	svc := newTestService(t)
-	original := Settings{ShowHiddenFiles: true, ThemeMode: "dark", TerminalProgram: "Terminal", DefaultEditor: "code"}
+	original := Settings{
+		ShowHiddenFiles:        true,
+		ThemeMode:              "dark",
+		TerminalProgram:        "Terminal",
+		DefaultEditor:          "code",
+		PinnedQuickAccessPaths: []string{"/tmp/project", "/tmp/archive"},
+	}
 	if err := svc.SaveSettings(original); err != nil {
 		t.Fatalf("SaveSettings() failed: %v", err)
 	}
@@ -51,6 +60,9 @@ func TestSettingsService_SaveAndGet(t *testing.T) {
 	}
 	if loaded.DefaultEditor != "code" {
 		t.Errorf("expected DefaultEditor=code, got %q", loaded.DefaultEditor)
+	}
+	if len(loaded.PinnedQuickAccessPaths) != 2 || loaded.PinnedQuickAccessPaths[0] != "/tmp/project" || loaded.PinnedQuickAccessPaths[1] != "/tmp/archive" {
+		t.Errorf("expected pinned quick access paths to round trip, got %v", loaded.PinnedQuickAccessPaths)
 	}
 }
 
