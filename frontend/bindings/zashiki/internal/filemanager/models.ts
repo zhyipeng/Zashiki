@@ -120,6 +120,59 @@ export class FileEntry {
     }
 }
 
+export class FilePreview {
+    "name": string;
+    "path": string;
+    "kind": string;
+    "mimeType": string;
+    "size": number;
+    "content": string;
+    "dataUrl": string;
+    "truncated": boolean;
+    "message": string;
+
+    /** Creates a new FilePreview instance. */
+    constructor($$source: Partial<FilePreview> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("kind" in $$source)) {
+            this["kind"] = "";
+        }
+        if (!("mimeType" in $$source)) {
+            this["mimeType"] = "";
+        }
+        if (!("size" in $$source)) {
+            this["size"] = 0;
+        }
+        if (!("content" in $$source)) {
+            this["content"] = "";
+        }
+        if (!("dataUrl" in $$source)) {
+            this["dataUrl"] = "";
+        }
+        if (!("truncated" in $$source)) {
+            this["truncated"] = false;
+        }
+        if (!("message" in $$source)) {
+            this["message"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FilePreview instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FilePreview {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FilePreview($$parsedSource as Partial<FilePreview>);
+    }
+}
+
 export class RootEntry {
     "name": string;
     "path": string;

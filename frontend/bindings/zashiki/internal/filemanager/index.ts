@@ -10,6 +10,7 @@ export {
     EntryOperationResult,
     EntryPathPair,
     FileEntry,
+    FilePreview,
     RootEntry,
     TrashInfo
 } from "./models.js";

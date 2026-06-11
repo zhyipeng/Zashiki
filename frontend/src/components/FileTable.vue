@@ -9,7 +9,7 @@ import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NAuto
 import type { AutoCompleteInst, AutoCompleteOption, DataTableColumns, DataTableInst, DataTableSortState, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
-import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
+import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
 import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined, SearchOutlined, UndoSharp, RedoSharp } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
@@ -20,6 +20,7 @@ import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
 import { notifyDirectoriesChanged, useDirectoryEvents } from '../composables/useDirectoryEvents'
 import { useFileOperationHistory } from '../composables/useFileOperationHistory'
 import DropConfirmModal from './DropConfirmModal.vue'
+import FilePreviewModal from './FilePreviewModal.vue'
 import { fileTypeLabel, isTextFile, resolveFileIcon } from './fileIcons'
 import { joinPath, parentPath as getParentPath } from './path'
 
@@ -181,6 +182,14 @@ const historyConfirmSummary = computed(() => {
   return null
 })
 const shortcutHelpModal = ref(false)
+const previewModal = ref({
+  show: false,
+  entry: null as FileEntry | null,
+  preview: null as FilePreview | null,
+  loading: false,
+  error: '',
+})
+let previewRequestId = 0
 
 watch([multiSelectMode, selectedRowKeys], () => {
   emit('selectionStatus', {
@@ -374,6 +383,9 @@ const canGoUp = computed(() => parentPath.value !== null)
 
 watch(() => props.path, (newPath) => {
   if (!newPath) return
+  if (previewModal.value.show) {
+    closePreviewModal()
+  }
   exitMultiSelectMode()
   currentRowKey.value = ''
   const existingIndex = history.value.indexOf(newPath)
@@ -1232,6 +1244,10 @@ function handleEscapeShortcut() {
     shortcutHelpModal.value = false
     return
   }
+  if (previewModal.value.show) {
+    closePreviewModal()
+    return
+  }
   if (deleteConfirmModal.value.show) {
     closeDeleteConfirmModal()
     return
@@ -1299,6 +1315,71 @@ function closeHistoryConfirmModal() {
   historyConfirmModal.value.show = false
 }
 
+function handlePreviewShortcut() {
+  if (previewModal.value.show) {
+    closePreviewModal()
+    return
+  }
+  openCurrentPreview()
+}
+
+function openCurrentPreview() {
+  const entry = currentEntry()
+  if (!entry || isParentEntry(entry) || entry.isDir) {
+    message.warning('请选择单个文件进行预览')
+    return
+  }
+  void openPreviewModal(entry)
+}
+
+async function openPreviewModal(entry: FileEntry) {
+  const requestId = ++previewRequestId
+  previewModal.value = {
+    show: true,
+    entry,
+    preview: null,
+    loading: true,
+    error: '',
+  }
+  try {
+    const preview = await FileService.GetFilePreview(entry.path)
+    if (requestId !== previewRequestId) return
+    previewModal.value.preview = preview
+  } catch (err) {
+    if (requestId !== previewRequestId) return
+    console.error('GetFilePreview failed:', entry.path, err)
+    previewModal.value.error = friendlyPreviewError(err)
+  } finally {
+    if (requestId === previewRequestId) {
+      previewModal.value.loading = false
+    }
+  }
+}
+
+function closePreviewModal() {
+  previewRequestId++
+  previewModal.value.show = false
+  previewModal.value.loading = false
+}
+
+function onPreviewModalShow(show: boolean) {
+  if (!show) {
+    closePreviewModal()
+  }
+}
+
+function friendlyPreviewError(err: unknown): string {
+  const text = err instanceof Error ? err.message : String(err)
+  const lower = text.toLowerCase()
+  if (lower.includes('permission denied') || lower.includes('access denied') || lower.includes('operation not permitted')) {
+    return '权限不足，无法预览'
+  }
+  if (lower.includes('no such file') || lower.includes('not found') || lower.includes('does not exist')) {
+    return '文件不存在，无法预览'
+  }
+  return `预览失败：${text}`
+}
+
 async function confirmHistoryOperation() {
   const action = historyConfirmModal.value.action
   if (!action) return
@@ -1333,6 +1414,7 @@ const shortcutActions: CategorizedShortcutAction[] = [
   { id: 'select-prev', category: 'selection', label: '选择上一项', keys: [{ key: 'k' }], run: () => selectEntryByOffset(-1) },
   { id: 'go-up', category: 'navigation', label: '返回上级目录', keys: [{ key: 'h' }], run: () => goUp(), disabled: () => !canGoUp.value },
   { id: 'open', category: 'file', label: '打开当前项', keys: [{ key: 'l' }], run: () => openCurrentEntry() },
+  { id: 'preview', category: 'file', label: '预览当前项', keys: [{ key: 'space' }], run: () => handlePreviewShortcut(), disabled: () => multiSelectMode.value && !previewModal.value.show },
   { id: 'toggle-search', category: 'search', label: '切换搜索栏', keys: [{ key: '/' }, { key: 'f', ctrlOrMeta: true, allowInEditable: true }], run: () => toggleSearch() },
   { id: 'escape', category: 'dialog', label: '退出搜索/多选/弹窗', keys: [{ key: 'escape' }], run: () => handleEscapeShortcut(), allowInEditable: true },
   { id: 'toggle-multi-select', category: 'selection', label: '切换多选模式', keys: [{ key: 'm' }], run: () => toggleMultiSelectMode() },
@@ -1607,6 +1689,14 @@ useKeyboardShortcuts(() => shortcutActions, {
       :target-dir="pendingDrop?.targetDir || ''"
       @confirm="onConfirm"
       @update:show="(v: boolean) => !v && onCancel()"
+    />
+    <FilePreviewModal
+      :show="previewModal.show"
+      :entry="previewModal.entry"
+      :preview="previewModal.preview"
+      :loading="previewModal.loading"
+      :error="previewModal.error"
+      @update:show="onPreviewModalShow"
     />
     <NModal
       v-model:show="createFolderModal.show"

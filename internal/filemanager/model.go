@@ -14,6 +14,18 @@ type FileEntry struct {
 	IsExecutable bool      `json:"isExecutable"`
 }
 
+type FilePreview struct {
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	Kind      string `json:"kind"`
+	MimeType  string `json:"mimeType"`
+	Size      int64  `json:"size"`
+	Content   string `json:"content"`
+	DataURL   string `json:"dataUrl"`
+	Truncated bool   `json:"truncated"`
+	Message   string `json:"message"`
+}
+
 type RootEntry struct {
 	Name       string `json:"name"`
 	Path       string `json:"path"`

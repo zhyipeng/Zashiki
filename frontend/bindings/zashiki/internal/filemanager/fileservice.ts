@@ -51,13 +51,19 @@ export function GetFileInfo(path: string): $CancellablePromise<$models.FileEntry
     });
 }
 
+export function GetFilePreview(path: string): $CancellablePromise<$models.FilePreview> {
+    return $Call.ByID(4209707701, path).then(($result: any) => {
+        return $$createType4($result);
+    });
+}
+
 export function GetHomeDir(): $CancellablePromise<string> {
     return $Call.ByID(4140196485);
 }
 
 export function GetRoots(): $CancellablePromise<$models.RootEntry[]> {
     return $Call.ByID(578700098).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -67,7 +73,7 @@ export function GetSeparator(): $CancellablePromise<string> {
 
 export function GetTrashInfo(): $CancellablePromise<$models.TrashInfo> {
     return $Call.ByID(3126279077).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
@@ -77,7 +83,7 @@ export function IsSameDrive(path1: string, path2: string): $CancellablePromise<b
 
 export function ListDir(path: string): $CancellablePromise<$models.FileEntry[]> {
     return $Call.ByID(461256242, path).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType8($result);
     });
 }
 
@@ -130,7 +136,8 @@ const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = $models.EntryOperationResult.createFrom;
 const $$createType2 = $Create.Array($$createType1);
 const $$createType3 = $models.FileEntry.createFrom;
-const $$createType4 = $models.RootEntry.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $models.TrashInfo.createFrom;
-const $$createType7 = $Create.Array($$createType3);
+const $$createType4 = $models.FilePreview.createFrom;
+const $$createType5 = $models.RootEntry.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = $models.TrashInfo.createFrom;
+const $$createType8 = $Create.Array($$createType3);

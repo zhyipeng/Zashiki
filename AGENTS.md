@@ -95,7 +95,7 @@ bun run test:coverage # 覆盖率报告
 go test ./...                    # 运行所有测试
 go test -v -count=1 ./...        # 详细输出，禁用缓存
 go test -coverprofile=coverage.out ./...  # 覆盖率
-wails3 generate  # 生成 wails binding
+wails3 generate bindings -ts  # 生成 wails binding
 ```
 
 **约束**：
