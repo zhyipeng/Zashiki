@@ -107,13 +107,12 @@ async function initViewer() {
     } else {
       if (!canvasRef.value) return
 
-      // Size the canvas to fill its parent
+      // Set canvas width to container width; height is auto-computed
+      // by the viewer from the page aspect ratio.
       const parent = canvasRef.value.parentElement
       if (parent) {
         canvasRef.value.width = parent.clientWidth * devicePixelRatio
-        canvasRef.value.height = parent.clientHeight * devicePixelRatio
         canvasRef.value.style.width = `${parent.clientWidth}px`
-        canvasRef.value.style.height = `${parent.clientHeight}px`
       }
 
       if (viewerType.value === 'pptx') {
@@ -134,10 +133,9 @@ function resizeCanvas() {
   if (!canvasRef.value) return
   const parent = canvasRef.value.parentElement
   if (!parent) return
+  // Only adjust width; viewer auto-computes height from page aspect ratio.
   canvasRef.value.width = parent.clientWidth * devicePixelRatio
-  canvasRef.value.height = parent.clientHeight * devicePixelRatio
   canvasRef.value.style.width = `${parent.clientWidth}px`
-  canvasRef.value.style.height = `${parent.clientHeight}px`
 }
 
 function goPrev() {
@@ -181,7 +179,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="office-preview-root" :class="{ 'is-xlsx': viewerType === 'xlsx' }">
+  <div class="office-preview-root" :class="{
+    'is-xlsx': viewerType === 'xlsx',
+    'is-canvas-viewer': viewerType === 'docx' || viewerType === 'pptx',
+  }">
     <div
       v-if="hasNavigation && loadingState === 'ready'"
       class="office-nav"
@@ -248,10 +249,15 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   position: relative;
   overflow: hidden;
+}
+
+.is-canvas-viewer .office-stage {
+  overflow: auto;
+  align-items: flex-start;
 }
 
 .office-spin {
@@ -270,7 +276,5 @@ onUnmounted(() => {
 .office-canvas {
   display: block;
   max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
 }
 </style>
