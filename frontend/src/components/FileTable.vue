@@ -30,6 +30,7 @@ import {
   normalizeFindModeText,
 } from './findMode'
 import type { FindModeTarget } from './findMode'
+import { pageEntryOffset } from './fileTableNavigation'
 import { joinPath, parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
@@ -37,6 +38,7 @@ const message = useMessage()
 const parentEntryPathPrefix = '__zashiki_parent__:'
 const shortcutScopeId = nextFileTableShortcutScopeId++
 const fileTableRef = ref<HTMLElement | null>(null)
+const tableAreaRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<DataTableInst | null>(null)
 const fileClipboard = useFileClipboard()
 const cutPathSet = computed(() => {
@@ -1042,6 +1044,18 @@ function selectEntryByOffset(offset: number) {
   setCurrentEntry(source[nextIndex])
 }
 
+function selectEntryByPage(direction: 1 | -1) {
+  selectEntryByOffset(direction * currentPageEntryOffset())
+}
+
+function currentPageEntryOffset(): number {
+  const row = tableAreaRef.value?.querySelector('tbody tr') as HTMLElement | null
+  return pageEntryOffset(
+    tableAreaRef.value?.clientHeight || 0,
+    row?.getBoundingClientRect().height || 0,
+  )
+}
+
 function selectFirstEntry() {
   const first = visibleEntries.value[0]
   if (first) setCurrentEntry(first)
@@ -1590,6 +1604,8 @@ async function redoLastOperation() {
 const shortcutActions: CategorizedShortcutAction[] = [
   { id: 'select-next', category: 'selection', label: '选择下一项', keys: [{ key: 'j' }, { key: 'arrowdown' }], run: () => selectEntryByOffset(1) },
   { id: 'select-prev', category: 'selection', label: '选择上一项', keys: [{ key: 'k' }, { key: 'arrowup' }], run: () => selectEntryByOffset(-1) },
+  { id: 'page-down', category: 'selection', label: '向下翻页', keys: [{ key: 'j', shift: true }, { key: 'pagedown' }], run: () => selectEntryByPage(1) },
+  { id: 'page-up', category: 'selection', label: '向上翻页', keys: [{ key: 'k', shift: true }, { key: 'pageup' }], run: () => selectEntryByPage(-1) },
   { id: 'go-up', category: 'navigation', label: '返回上级目录', keys: [{ key: 'h' }, { key: 'arrowleft' }], run: () => goUp(), disabled: () => !canGoUp.value },
   { id: 'open', category: 'file', label: '打开当前项', keys: [{ key: 'l' }, { key: 'arrowright' }], run: () => openCurrentEntry() },
   { id: 'preview', category: 'file', label: '预览当前项', keys: [{ key: 'space' }], run: () => handlePreviewShortcut(), disabled: () => multiSelectMode.value && !previewModal.value.show },
@@ -1806,6 +1822,7 @@ useKeyboardShortcuts(() => shortcutActions, {
       />
     </div>
     <div
+      ref="tableAreaRef"
       class="table-area"
       @dragover="onDragOver"
       @dragenter="onDragEnter"
