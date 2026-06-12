@@ -1,13 +1,10 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
-Comment=A file-explorer application
-# The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/file-explorer %u
+Name=Zashiki
+Comment=A cross-platform file explorer
+Exec=/usr/local/bin/Zashiki %u
 Terminal=false
 Type=Application
-Icon=file-explorer
+Icon=Zashiki
 Categories=Utility;
-StartupWMClass=file-explorer
-
- 
+StartupWMClass=Zashiki

@@ -181,16 +181,22 @@ tasks:
       - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true{{if eq .OBFUSCATED "true"}} -obfuscated{{end}} -ts
 
   generate:icons:
-    summary: Generates Windows `.ico` and Mac `.icns` from an image; on macOS, `-iconcomposerinput appicon.icon -macassetdir darwin` also produces `Assets.car` from a `.icon` file (skipped on other platforms).
+    summary: Generates all platform icons from the master PNG (macOS .icns, Windows .ico, iOS, Android, web favicon)
     dir: build
     sources:
       - "appicon.png"
       - "appicon.icon"
+      - "generate_icons.py"
     generates:
       - "darwin/icons.icns"
       - "windows/icon.ico"
+      - "ios/icon.png"
+      - "android/app/src/main/res/mipmap-mdpi/ic_launcher.png"
     cmds:
-      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico -iconcomposerinput appicon.icon -macassetdir darwin
+      - cmd: python3 -c "from PIL import Image; print('Pillow OK')" 2>/dev/null || python3 -m pip install Pillow 2>&1 | tail -1
+        ignore_error: true
+      - cmd: python3 generate_icons.py
+        ignore_error: true
 
   dev:frontend:
     summary: Runs the frontend in development mode

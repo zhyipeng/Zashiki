@@ -207,16 +207,17 @@ const quickAccess = computed(() => {
 const quickAccessHeight = computed(() => `${38 * quickAccess.value.length}px`)
 
 async function onQuickAccessClick(item: QuickAccessItem) {
-  if (item.path) {
-    emit('navigate', item.path)
-    return
-  }
   if (item.isTrash) {
     try {
       await FileService.OpenTrash()
+      return
     } catch (err) {
       message.error(`打开${item.label}失败：${err}`)
     }
+  }
+  if (item.path) {
+    emit('navigate', item.path)
+    return
   }
 }
 

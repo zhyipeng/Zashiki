@@ -35,6 +35,12 @@ tasks:
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
+  generate:icons:
+    summary: Generates all platform icons from the SVG source
+    cmds:
+      - task: common:generate:icons
+    ignore_error: true
+
   setup:docker:
     summary: Builds Docker image for cross-compilation (~800MB download)
     cmds:

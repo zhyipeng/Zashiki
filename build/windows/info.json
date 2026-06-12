@@ -5,11 +5,11 @@
 	"info": {
 		"0000": {
 			"ProductVersion": "0.1.0",
-			"CompanyName": "My Company",
-			"FileDescription": "A file-explorer application",
-			"LegalCopyright": "© 2026, My Company",
-			"ProductName": "My Product",
-			"Comments": "This is a comment"
+			"CompanyName": "Zashiki",
+			"FileDescription": "A cross-platform file explorer",
+			"LegalCopyright": "© 2025, Zashiki",
+			"ProductName": "Zashiki",
+			"Comments": "A cross-platform file explorer"
 		}
 	}
 }

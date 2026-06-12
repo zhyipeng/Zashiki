@@ -3,26 +3,26 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "file-explorer"
+name: "Zashiki"
 arch: ${GOARCH}
 platform: "linux"
 version: "0.1.0"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "A file-explorer application"
-vendor: "My Company"
+description: "A cross-platform file explorer"
+vendor: "Zashiki"
 homepage: "https://wails.io"
 license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/file-explorer"
-    dst: "/usr/local/bin/file-explorer"
+  - src: "./bin/Zashiki"
+    dst: "/usr/local/bin/Zashiki"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/file-explorer.png"
-  - src: "./build/linux/file-explorer.desktop"
-    dst: "/usr/share/applications/file-explorer.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/Zashiki.png"
+  - src: "./build/linux/Zashiki.desktop"
+    dst: "/usr/share/applications/Zashiki.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:
