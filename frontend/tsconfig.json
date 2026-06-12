@@ -13,7 +13,13 @@
     "esModuleInterop": true,
     "lib": ["ESNext", "DOM"],
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@silurus/ooxml/docx": ["./node_modules/@silurus/ooxml/dist/types/docx.d.ts"],
+      "@silurus/ooxml/pptx": ["./node_modules/@silurus/ooxml/dist/types/pptx.d.ts"],
+      "@silurus/ooxml/xlsx": ["./node_modules/@silurus/ooxml/dist/types/xlsx.d.ts"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "bindings"],
 }

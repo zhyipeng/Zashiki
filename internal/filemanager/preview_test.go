@@ -155,6 +155,73 @@ func TestFileService_SaveTextPreview(t *testing.T) {
 	}
 }
 
+func TestFileService_GetFilePreview_Office(t *testing.T) {
+	dir := t.TempDir()
+	content := []byte("fake docx content")
+
+	tests := []struct {
+		name     string
+		ext      string
+		wantMime string
+	}{
+		{"docx", ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+		{"xlsx", ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+		{"pptx", ".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(dir, "file"+tt.ext)
+			if err := os.WriteFile(path, content, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			s := &FileService{}
+			preview, err := s.GetFilePreview(path)
+			if err != nil {
+				t.Fatalf("GetFilePreview() error = %v", err)
+			}
+
+			if preview.Kind != "office" {
+				t.Fatalf("Kind = %q, want office", preview.Kind)
+			}
+			if preview.MimeType != tt.wantMime {
+				t.Fatalf("MimeType = %q, want %q", preview.MimeType, tt.wantMime)
+			}
+			if !strings.HasPrefix(preview.DataURL, "data:"+tt.wantMime+";base64,") {
+				t.Fatalf("DataURL = %q, want %q prefix", preview.DataURL, "data:"+tt.wantMime+";base64,")
+			}
+			if preview.Size != int64(len(content)) {
+				t.Fatalf("Size = %d, want %d", preview.Size, len(content))
+			}
+		})
+	}
+}
+
+func TestFileService_GetFilePreview_OfficeTooLarge(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "huge.docx")
+
+	// Create a file larger than maxOfficePreviewBytes
+	data := make([]byte, maxOfficePreviewBytes+1)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	preview, err := s.GetFilePreview(path)
+	if err != nil {
+		t.Fatalf("GetFilePreview() error = %v", err)
+	}
+
+	if preview.Kind != "unsupported" {
+		t.Fatalf("Kind = %q, want unsupported (too large)", preview.Kind)
+	}
+	if preview.Message == "" {
+		t.Fatal("Message should be non-empty for oversized file")
+	}
+}
+
 func TestFileService_SaveTextPreviewRejectsChangedFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "note.txt")

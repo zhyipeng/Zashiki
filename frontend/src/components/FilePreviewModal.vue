@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { NAlert, NButton, NEmpty, NInput, NModal, NSpin, NSpace, NTag } from 'naive-ui'
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
 import { formatPreviewSize, isFormattedJsonPreview, previewTextContent, resolvePreviewRenderer } from './preview'
+import OfficePreview from './OfficePreview.vue'
 
 const props = defineProps<{
   show: boolean
@@ -97,7 +98,10 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
       </div>
       <div
         class="preview-stage"
-        :class="{ 'text-preview-stage': renderer.kind === 'text' }"
+        :class="{
+          'text-preview-stage': renderer.kind === 'text',
+          'is-office': renderer.kind === 'office',
+        }"
         @dblclick="onPreviewStageDblclick"
       >
         <NSpin v-if="loading" class="preview-spin" />
@@ -119,6 +123,7 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
             @keydown.meta.s="saveEditFromKeyboard"
           />
           <pre v-else-if="renderer.kind === 'text'" class="preview-text">{{ displayedTextContent }}</pre>
+          <OfficePreview v-else-if="renderer.kind === 'office' && preview" :preview="preview" />
           <NEmpty v-else :description="preview.message || '暂不支持此文件类型预览'" />
         </template>
         <NEmpty v-else description="暂无预览" />
@@ -160,6 +165,15 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.preview-stage.is-office {
+  height: min(68vh, 700px);
+  max-height: none;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+  padding: 0;
 }
 
 .text-preview-stage {

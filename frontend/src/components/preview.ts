@@ -19,6 +19,10 @@ export const previewRenderers: PreviewRenderer[] = [
     kind: 'image',
     label: '图片',
   },
+  {
+    kind: 'office',
+    label: 'Office',
+  },
   unsupportedPreviewRenderer,
 ]
 
