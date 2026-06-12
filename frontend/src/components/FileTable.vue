@@ -5,6 +5,7 @@ let activeFileTableShortcutScopeId = 0
 
 <script setup lang="ts">
 import { ref, watch, computed, h, nextTick, onMounted } from 'vue'
+import type { VNodeChild } from 'vue'
 import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NAutoComplete, NDropdown, NModal, NSpace, NTag, useMessage } from 'naive-ui'
 import type { AutoCompleteInst, AutoCompleteOption, DataTableColumns, DataTableInst, DataTableSortState, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
@@ -22,6 +23,13 @@ import { useFileOperationHistory } from '../composables/useFileOperationHistory'
 import DropConfirmModal from './DropConfirmModal.vue'
 import FilePreviewModal from './FilePreviewModal.vue'
 import { fileTypeLabel, isTextFile, resolveFileIcon } from './fileIcons'
+import {
+  createFindModeTargets,
+  exactFindModeLabelMatch,
+  findModeMatchedTargets,
+  normalizeFindModeText,
+} from './findMode'
+import type { FindModeTarget } from './findMode'
 import { joinPath, parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
@@ -128,6 +136,8 @@ const pathError = ref(false)
 const multiSelectMode = ref(false)
 const selectedRowKeys = ref<string[]>([])
 const currentRowKey = ref('')
+const findModeActive = ref(false)
+const findModeQuery = ref('')
 const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 const sortState = ref<DataTableSortState | null>(null)
 const trashLabel = computed(() => props.trashLabel || '回收站')
@@ -386,6 +396,7 @@ watch(() => props.path, (newPath) => {
   if (previewModal.value.show) {
     closePreviewModal()
   }
+  exitFindMode()
   exitMultiSelectMode()
   currentRowKey.value = ''
   const existingIndex = history.value.indexOf(newPath)
@@ -673,6 +684,128 @@ function filterEntriesBySearch(source: FileEntry[]): FileEntry[] {
   return source.filter(entry => matchesSearch(entry, query))
 }
 
+const findModeTargets = computed(() => {
+  pinyinReady.value
+  return createFindModeTargets(visibleEntries.value, (text, pattern) => pinyinText(text, pattern))
+})
+
+const matchedFindModeTargets = computed(() => {
+  return findModeMatchedTargets(findModeTargets.value, findModeQuery.value)
+})
+
+const findModeLabelByPath = computed(() => {
+  return new Map(findModeTargets.value.map(target => [target.path, target.label]))
+})
+
+const matchedFindModePathSet = computed(() => {
+  return new Set(matchedFindModeTargets.value.map(target => target.path))
+})
+
+function enterFindMode() {
+  findModeActive.value = true
+  findModeQuery.value = ''
+  void ensurePinyinLoaded()
+  nextTick(() => {
+    focusFileTable()
+  })
+}
+
+function exitFindMode() {
+  findModeActive.value = false
+  findModeQuery.value = ''
+}
+
+function onFileTableKeydown(event: KeyboardEvent) {
+  if (!findModeActive.value || isFindModeEditableTarget(event.target)) return
+
+  const key = event.key
+  if (key === 'Escape' || key === 'Esc') {
+    event.preventDefault()
+    event.stopPropagation()
+    exitFindMode()
+    return
+  }
+
+  if (key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    void jumpToFirstMatchedFindModeTarget()
+    return
+  }
+
+  if (key === 'Backspace') {
+    event.preventDefault()
+    event.stopPropagation()
+    findModeQuery.value = findModeQuery.value.slice(0, -1)
+    return
+  }
+
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  if (key.length !== 1) return
+
+  event.preventDefault()
+  event.stopPropagation()
+  findModeQuery.value = normalizeFindModeText(findModeQuery.value + key)
+  const exactTarget = exactFindModeLabelMatch(findModeTargets.value, findModeQuery.value)
+  if (exactTarget) {
+    jumpToFindModeTarget(exactTarget)
+  }
+}
+
+function jumpToFindModeTarget(target: FindModeTarget<FileEntry> | null) {
+  if (!target) return
+  setCurrentEntry(target.entry)
+  exitFindMode()
+  focusFileTable()
+}
+
+async function jumpToFirstMatchedFindModeTarget() {
+  if (!pinyinFn) {
+    await ensurePinyinLoaded()
+  }
+  if (!findModeActive.value) return
+  jumpToFindModeTarget(matchedFindModeTargets.value[0] || null)
+}
+
+function isFindModeEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName.toLowerCase()
+  return tag === 'input' || tag === 'textarea' || target.isContentEditable
+}
+
+function findModeLabelForEntry(row: FileEntry): string {
+  if (!findModeActive.value) return ''
+  return findModeLabelByPath.value.get(row.path) || ''
+}
+
+function isFindModeMatchedEntry(row: FileEntry): boolean {
+  return !findModeActive.value || matchedFindModePathSet.value.has(row.path)
+}
+
+function renderFindModeLabel(row: FileEntry) {
+  const label = findModeLabelForEntry(row)
+  if (!label) return null
+
+  const matched = isFindModeMatchedEntry(row)
+  return h('span', {
+    class: [
+      'find-mode-label',
+      matched ? 'find-mode-label-matched' : 'find-mode-label-muted',
+    ],
+  }, renderFindModeLabelText(label, matched))
+}
+
+function renderFindModeLabelText(label: string, matched: boolean) {
+  const query = normalizeFindModeText(findModeQuery.value)
+  const upperLabel = label.toUpperCase()
+  if (!matched || !query || !label.startsWith(query)) return upperLabel
+
+  return [
+    h('span', { class: 'find-mode-label-typed' }, upperLabel.slice(0, query.length)),
+    upperLabel.slice(query.length),
+  ]
+}
+
 function createBaseColumns(): DataTableColumns<FileEntry> {
   return [
     {
@@ -682,7 +815,10 @@ function createBaseColumns(): DataTableColumns<FileEntry> {
       sortOrder: sortOrderFor('name'),
       render(row) {
         const fileIcon = resolveFileIcon(row)
-        return h('div', { class: 'file-name-cell' }, [
+        const children: VNodeChild[] = []
+        const findLabel = renderFindModeLabel(row)
+        if (findLabel) children.push(findLabel)
+        children.push(
           h(NIcon, {
             class: 'file-icon',
             color: fileIcon.color,
@@ -690,7 +826,13 @@ function createBaseColumns(): DataTableColumns<FileEntry> {
             title: fileIcon.label,
           }, { default: () => h(fileIcon.icon) }),
           h('span', { class: 'file-name-text' }, row.name),
-        ])
+        )
+        return h('div', {
+          class: [
+            'file-name-cell',
+            findModeActive.value ? 'file-name-cell-with-find-label' : '',
+          ],
+        }, children)
       },
     },
     {
@@ -1272,6 +1414,10 @@ function handleEscapeShortcut() {
     hideContextMenu()
     return
   }
+  if (findModeActive.value) {
+    exitFindMode()
+    return
+  }
   if (searchVisible.value) {
     closeSearch()
     return
@@ -1447,6 +1593,7 @@ const shortcutActions: CategorizedShortcutAction[] = [
   { id: 'go-up', category: 'navigation', label: '返回上级目录', keys: [{ key: 'h' }, { key: 'arrowleft' }], run: () => goUp(), disabled: () => !canGoUp.value },
   { id: 'open', category: 'file', label: '打开当前项', keys: [{ key: 'l' }, { key: 'arrowright' }], run: () => openCurrentEntry() },
   { id: 'preview', category: 'file', label: '预览当前项', keys: [{ key: 'space' }], run: () => handlePreviewShortcut(), disabled: () => multiSelectMode.value && !previewModal.value.show },
+  { id: 'enter-find-mode', category: 'search', label: '进入 Find 跳转模式', keys: [{ key: 'f' }], run: () => enterFindMode() },
   { id: 'toggle-search', category: 'search', label: '切换搜索栏', keys: [{ key: '/' }, { key: 'f', ctrlOrMeta: true, allowInEditable: true }], run: () => toggleSearch() },
   { id: 'escape', category: 'dialog', label: '退出搜索/多选/弹窗', keys: [{ key: 'escape' }], run: () => handleEscapeShortcut(), allowInEditable: true },
   { id: 'toggle-multi-select', category: 'selection', label: '切换多选模式', keys: [{ key: 'm' }], run: () => toggleMultiSelectMode() },
@@ -1508,9 +1655,11 @@ useKeyboardShortcuts(() => shortcutActions, {
   <div
     ref="fileTableRef"
     class="file-table"
+    :class="{ 'find-mode-active': findModeActive }"
     tabindex="-1"
     @pointerdown="activateShortcutScope"
     @focusin="activateShortcutScope"
+    @keydown.capture="onFileTableKeydown"
   >
     <div class="toolbar">
       <div class="toolbar-left">
@@ -1686,6 +1835,8 @@ useKeyboardShortcuts(() => shortcutActions, {
             currentRowKey === row.path ? 'current-entry' : '',
             selectedPathSet.has(row.path) ? 'selected-entry' : '',
             cutPathSet.has(row.path) ? 'cut-entry' : '',
+            findModeActive && isFindModeMatchedEntry(row) ? 'find-mode-matched-entry' : '',
+            findModeActive && !isFindModeMatchedEntry(row) ? 'find-mode-unmatched-entry' : '',
           ].filter(Boolean).join(' '),
           'data-folder-path': row.isDir && !isParentEntry(row) ? row.path : undefined,
           draggable: !isParentEntry(row),
@@ -1963,6 +2114,41 @@ useKeyboardShortcuts(() => shortcutActions, {
   white-space: nowrap;
 }
 
+:deep(.file-name-cell-with-find-label) {
+  position: relative;
+  min-height: 22px;
+  padding-left: 36px;
+}
+
+:deep(.find-mode-label) {
+  position: absolute;
+  //top: -3px;
+  left: 0;
+  min-width: 24px;
+  padding: 1px 5px;
+  border: 1px solid rgba(122, 92, 0, 0.28);
+  border-radius: 4px;
+  background: #ffd84d;
+  color: #2d2100;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(122, 92, 0, 0.22);
+  pointer-events: none;
+}
+
+:deep(.find-mode-label-typed) {
+  color: #fff;
+  text-shadow: 0 0 2px rgba(45, 33, 0, 0.8);
+}
+
+:deep(.find-mode-label-muted) {
+  opacity: 0.38;
+}
+
 .modal-body {
   font-size: 13px;
 }
@@ -2016,6 +2202,14 @@ useKeyboardShortcuts(() => shortcutActions, {
 
 :deep(tr.cut-entry td) {
   opacity: 0.45;
+}
+
+:deep(tr.find-mode-matched-entry td) {
+  background: rgba(255, 216, 77, 0.12) !important;
+}
+
+:deep(tr.find-mode-unmatched-entry td) {
+  opacity: 0.42;
 }
 
 .shortcut-help {
