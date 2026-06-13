@@ -2139,7 +2139,7 @@ useKeyboardShortcuts(() => shortcutActions, {
 
 :deep(.find-mode-label) {
   position: absolute;
-  //top: -3px;
+  /* top: -3px; */
   left: 0;
   min-width: 24px;
   padding: 1px 5px;
