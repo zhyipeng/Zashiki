@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NAlert, NButton, NEmpty, NInput, NModal, NSpin, NSpace, NTag } from 'naive-ui'
+import { NAlert, NButton, NEmpty, NInput, NModal, NSpin, NSpace, NSwitch, NTag } from 'naive-ui'
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
-import { formatPreviewSize, isFormattedJsonPreview, previewTextContent, resolvePreviewRenderer } from './preview'
+import { formatPreviewSize, isFormattedJsonPreview, isMarkdownPreview, previewTextContent, resolvePreviewRenderer } from './preview'
 import OfficePreview from './OfficePreview.vue'
 import PdfPreview from './PdfPreview.vue'
 
@@ -24,19 +24,37 @@ const title = computed(() => props.entry?.name || '预览')
 const sizeText = computed(() => formatPreviewSize(props.preview?.size ?? props.entry?.size ?? 0))
 const editMode = ref(false)
 const draftContent = ref('')
+const mdViewMode = ref<'preview' | 'source'>('preview')
 const canEdit = computed(() => props.preview?.kind === 'text' && !props.preview.truncated && !props.loading && !props.error)
 const hasChanges = computed(() => draftContent.value !== (props.preview?.content || ''))
 const displayedTextContent = computed(() => previewTextContent(props.preview))
 const jsonFormatted = computed(() => isFormattedJsonPreview(props.preview))
+const isMarkdown = computed(() => isMarkdownPreview(props.preview))
+const markdownModule = ref<typeof import('marked') | null>(null)
+const markdownLoaded = ref(false)
+
+const renderedMarkdown = computed(() => {
+  if (!isMarkdown.value || !props.preview?.content || !markdownModule.value) return ''
+  return markdownModule.value.marked.parse(props.preview.content, { async: false }) as string
+})
+
+watch(isMarkdown, async (val) => {
+  if (val && !markdownLoaded.value) {
+    markdownModule.value = await import('marked')
+    markdownLoaded.value = true
+  }
+}, { immediate: true })
 
 watch(() => props.preview, (preview) => {
   editMode.value = false
+  mdViewMode.value = 'preview'
   draftContent.value = preview?.kind === 'text' ? preview.content : ''
 })
 
 watch(() => props.show, (show) => {
   if (!show) {
     editMode.value = false
+    mdViewMode.value = 'preview'
   }
 })
 
@@ -46,6 +64,7 @@ function onUpdateShow(show: boolean) {
 
 function enterEditMode() {
   if (editMode.value || !canEdit.value || !props.preview) return
+  if (isMarkdown.value) mdViewMode.value = 'source'
   draftContent.value = props.preview.content
   editMode.value = true
 }
@@ -89,6 +108,11 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
         <span v-if="preview?.mimeType">{{ preview.mimeType }}</span>
         <span v-if="preview?.truncated">已截断</span>
         <span v-if="jsonFormatted">已格式化预览</span>
+        <NSpace v-if="isMarkdown && !editMode" class="preview-actions" size="small" align="center">
+          <span>预览</span>
+          <NSwitch size="small" :value="mdViewMode === 'source'" @update:value="(v: boolean) => mdViewMode = v ? 'source' : 'preview'" />
+          <span>源码</span>
+        </NSpace>
         <NSpace v-if="canEdit" class="preview-actions" size="small">
           <NButton v-if="!editMode" size="tiny" @click="enterEditMode">编辑</NButton>
           <template v-else>
@@ -124,6 +148,7 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
             @keydown.ctrl.s="saveEditFromKeyboard"
             @keydown.meta.s="saveEditFromKeyboard"
           />
+          <div v-else-if="renderer.kind === 'text' && isMarkdown && mdViewMode === 'preview'" class="preview-markdown" v-html="renderedMarkdown" />
           <pre v-else-if="renderer.kind === 'text'" class="preview-text">{{ displayedTextContent }}</pre>
           <OfficePreview v-else-if="renderer.kind === 'office' && preview" :preview="preview" />
           <PdfPreview v-else-if="renderer.kind === 'pdf' && preview" :preview="preview" />
@@ -244,5 +269,89 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
 .preview-editor :deep(.n-input-wrapper),
 .preview-editor :deep(.n-input__textarea) {
   height: 100%;
+}
+
+.preview-markdown {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  align-self: stretch;
+  overflow: auto;
+  color: var(--n-text-color);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.preview-markdown :deep(h1),
+.preview-markdown :deep(h2),
+.preview-markdown :deep(h3),
+.preview-markdown :deep(h4),
+.preview-markdown :deep(h5),
+.preview-markdown :deep(h6) {
+  margin: 16px 0 8px;
+  line-height: 1.4;
+}
+
+.preview-markdown :deep(p) {
+  margin: 0 0 12px;
+}
+
+.preview-markdown :deep(ul),
+.preview-markdown :deep(ol) {
+  margin: 0 0 12px;
+  padding-left: 24px;
+}
+
+.preview-markdown :deep(code) {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.preview-markdown :deep(pre) {
+  margin: 0 0 12px;
+  padding: 12px;
+  border-radius: 6px;
+  overflow: auto;
+}
+
+.preview-markdown :deep(pre code) {
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.preview-markdown :deep(blockquote) {
+  margin: 0 0 12px;
+  padding: 4px 16px;
+  border-left: 4px solid var(--n-border-color);
+}
+
+.preview-markdown :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+}
+
+.preview-markdown :deep(th),
+.preview-markdown :deep(td) {
+  padding: 6px 12px;
+  border: 1px solid var(--n-border-color);
+}
+
+.preview-markdown :deep(img) {
+  max-width: 100%;
+}
+
+.preview-markdown :deep(a) {
+  color: var(--n-primary-color);
+}
+
+.preview-markdown :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--n-border-color);
+  margin: 16px 0;
 }
 </style>

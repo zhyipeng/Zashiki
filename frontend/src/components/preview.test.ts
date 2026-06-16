@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatPreviewSize, isFormattedJsonPreview, previewTextContent, resolvePreviewRenderer } from './preview'
+import { formatPreviewSize, isFormattedJsonPreview, isMarkdownPreview, previewTextContent, resolvePreviewRenderer } from './preview'
 
 describe('preview renderer registry', () => {
   it('resolves known preview renderer kinds', () => {
@@ -68,5 +68,27 @@ describe('previewTextContent', () => {
     } as any
 
     expect(previewTextContent(preview)).toBe('{"name":"not-json-preview"}')
+  })
+})
+
+describe('isMarkdownPreview', () => {
+  it('recognizes markdown by mimeType', () => {
+    expect(isMarkdownPreview({ kind: 'text', mimeType: 'text/markdown', name: 'doc', path: '/tmp/doc' } as any)).toBe(true)
+  })
+
+  it('recognizes markdown by .md extension in name', () => {
+    expect(isMarkdownPreview({ kind: 'text', mimeType: 'text/plain', name: 'readme.md', path: '/tmp/readme.md' } as any)).toBe(true)
+  })
+
+  it('recognizes markdown by .md extension in path', () => {
+    expect(isMarkdownPreview({ kind: 'text', mimeType: 'text/plain', name: 'README', path: '/tmp/README.md' } as any)).toBe(true)
+  })
+
+  it('returns false for non-text preview', () => {
+    expect(isMarkdownPreview({ kind: 'image', mimeType: 'image/png', name: 'pic.png', path: '/tmp/pic.png' } as any)).toBe(false)
+  })
+
+  it('returns false for non-markdown text', () => {
+    expect(isMarkdownPreview({ kind: 'text', mimeType: 'text/plain', name: 'note.txt', path: '/tmp/note.txt' } as any)).toBe(false)
   })
 })

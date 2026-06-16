@@ -66,3 +66,10 @@ function isJsonPreview(preview: FilePreview): boolean {
   if (mimeType === 'application/json' || mimeType.endsWith('+json')) return true
   return preview.name.toLowerCase().endsWith('.json') || preview.path.toLowerCase().endsWith('.json')
 }
+
+export function isMarkdownPreview(preview: FilePreview | null | undefined): boolean {
+  if (!preview || preview.kind !== 'text') return false
+  const mimeType = preview.mimeType.toLowerCase()
+  if (mimeType === 'text/markdown') return true
+  return preview.name.toLowerCase().endsWith('.md') || preview.path.toLowerCase().endsWith('.md')
+}
