@@ -222,6 +222,57 @@ func TestFileService_GetFilePreview_OfficeTooLarge(t *testing.T) {
 	}
 }
 
+func TestFileService_GetFilePreview_Pdf(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.pdf")
+	content := []byte("%PDF-1.4 fake pdf content")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	preview, err := s.GetFilePreview(path)
+	if err != nil {
+		t.Fatalf("GetFilePreview() error = %v", err)
+	}
+
+	if preview.Kind != "pdf" {
+		t.Fatalf("Kind = %q, want pdf", preview.Kind)
+	}
+	if preview.MimeType != "application/pdf" {
+		t.Fatalf("MimeType = %q, want application/pdf", preview.MimeType)
+	}
+	if !strings.HasPrefix(preview.DataURL, "data:application/pdf;base64,") {
+		t.Fatalf("DataURL = %q, want application/pdf data URL prefix", preview.DataURL)
+	}
+	if preview.Size != int64(len(content)) {
+		t.Fatalf("Size = %d, want %d", preview.Size, len(content))
+	}
+}
+
+func TestFileService_GetFilePreview_PdfTooLarge(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "huge.pdf")
+
+	data := make([]byte, maxPdfPreviewBytes+1)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	preview, err := s.GetFilePreview(path)
+	if err != nil {
+		t.Fatalf("GetFilePreview() error = %v", err)
+	}
+
+	if preview.Kind != "unsupported" {
+		t.Fatalf("Kind = %q, want unsupported (too large)", preview.Kind)
+	}
+	if preview.Message == "" {
+		t.Fatal("Message should be non-empty for oversized file")
+	}
+}
+
 func TestFileService_SaveTextPreviewRejectsChangedFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "note.txt")

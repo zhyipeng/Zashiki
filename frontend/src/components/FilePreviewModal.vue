@@ -4,6 +4,7 @@ import { NAlert, NButton, NEmpty, NInput, NModal, NSpin, NSpace, NTag } from 'na
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
 import { formatPreviewSize, isFormattedJsonPreview, previewTextContent, resolvePreviewRenderer } from './preview'
 import OfficePreview from './OfficePreview.vue'
+import PdfPreview from './PdfPreview.vue'
 
 const props = defineProps<{
   show: boolean
@@ -101,6 +102,7 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
         :class="{
           'text-preview-stage': renderer.kind === 'text',
           'is-office': renderer.kind === 'office',
+          'is-pdf': renderer.kind === 'pdf',
         }"
         @dblclick="onPreviewStageDblclick"
       >
@@ -124,6 +126,7 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
           />
           <pre v-else-if="renderer.kind === 'text'" class="preview-text">{{ displayedTextContent }}</pre>
           <OfficePreview v-else-if="renderer.kind === 'office' && preview" :preview="preview" />
+          <PdfPreview v-else-if="renderer.kind === 'pdf' && preview" :preview="preview" />
           <NEmpty v-else :description="preview.message || '暂不支持此文件类型预览'" />
         </template>
         <NEmpty v-else description="暂无预览" />
@@ -168,6 +171,15 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
 }
 
 .preview-stage.is-office {
+  height: min(68vh, 700px);
+  max-height: none;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+  padding: 0;
+}
+
+.preview-stage.is-pdf {
   height: min(68vh, 700px);
   max-height: none;
   align-items: stretch;

@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	maxTextPreviewBytes  = 256 * 1024
-	maxImagePreviewBytes = 10 * 1024 * 1024
+	maxTextPreviewBytes   = 256 * 1024
+	maxImagePreviewBytes  = 10 * 1024 * 1024
 	maxOfficePreviewBytes = 100 * 1024 * 1024
+	maxPdfPreviewBytes    = 50 * 1024 * 1024
 )
 
 type previewContext struct {
@@ -35,6 +36,7 @@ type previewProvider interface {
 var filePreviewProviders = []previewProvider{
 	imagePreviewProvider{},
 	officePreviewProvider{},
+	pdfPreviewProvider{},
 	textPreviewProvider{},
 	unsupportedPreviewProvider{},
 }
@@ -144,6 +146,32 @@ func (officePreviewProvider) Build(ctx previewContext) (FilePreview, error) {
 	return preview, nil
 }
 
+type pdfPreviewProvider struct{}
+
+func (pdfPreviewProvider) Match(ctx previewContext) bool {
+	return previewPdfMIMETypes[ctx.ext] != ""
+}
+
+func (pdfPreviewProvider) Build(ctx previewContext) (FilePreview, error) {
+	if ctx.size > maxPdfPreviewBytes {
+		preview := baseFilePreview(ctx, "unsupported")
+		preview.Message = "PDF 文件超过 50 MB，暂不生成预览"
+		return preview, nil
+	}
+
+	data, err := os.ReadFile(ctx.path)
+	if err != nil {
+		return FilePreview{}, err
+	}
+
+	mimeType := previewPdfMIMETypes[ctx.ext]
+
+	preview := baseFilePreview(ctx, "pdf")
+	preview.MimeType = mimeType
+	preview.DataURL = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
+	return preview, nil
+}
+
 type textPreviewProvider struct{}
 
 func (textPreviewProvider) Match(ctx previewContext) bool {
@@ -243,6 +271,9 @@ func previewMimeType(name string) string {
 	if mimeType := previewOfficeMIMETypes[ext]; mimeType != "" {
 		return mimeType
 	}
+	if mimeType := previewPdfMIMETypes[ext]; mimeType != "" {
+		return mimeType
+	}
 	if mimeType := previewTextMIMETypes[ext]; mimeType != "" {
 		return mimeType
 	}
@@ -269,6 +300,10 @@ var previewOfficeMIMETypes = map[string]string{
 	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 	".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+var previewPdfMIMETypes = map[string]string{
+	".pdf": "application/pdf",
 }
 
 var previewTextMIMETypes = map[string]string{

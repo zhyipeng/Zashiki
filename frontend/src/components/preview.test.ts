@@ -12,6 +12,12 @@ describe('preview renderer registry', () => {
     const renderer = resolvePreviewRenderer({ kind: 'video' } as any)
     expect(renderer.kind).toBe('unsupported')
   })
+
+  it('resolves pdf preview renderer kind', () => {
+    const renderer = resolvePreviewRenderer({ kind: 'pdf' } as any)
+    expect(renderer.kind).toBe('pdf')
+    expect(renderer.label).toBe('PDF')
+  })
 })
 
 describe('formatPreviewSize', () => {

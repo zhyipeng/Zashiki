@@ -17,7 +17,8 @@
     "@wailsio/runtime": "latest",
     "naive-ui": "^2.44.1",
     "pinyin-pro": "^3.28.1",
-    "vue": "^3.2.45"
+    "vue": "^3.2.45",
+    "vue-pdf-embed": "^2.1.4"
   },
   "devDependencies": {
     "@vicons/fluent": "^0.13.0",

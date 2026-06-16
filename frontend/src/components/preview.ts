@@ -23,6 +23,10 @@ export const previewRenderers: PreviewRenderer[] = [
     kind: 'office',
     label: 'Office',
   },
+  {
+    kind: 'pdf',
+    label: 'PDF',
+  },
   unsupportedPreviewRenderer,
 ]
 
