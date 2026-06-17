@@ -82,3 +82,138 @@ export function isHtmlPreview(preview: FilePreview | null | undefined): boolean 
   if (!preview || preview.kind !== 'html') return false
   return true
 }
+
+/**
+ * Map file extension or mimeType to a Shiki language id.
+ * Returns undefined if the language is not supported for code highlighting.
+ */
+export function resolveCodeLanguage(preview: FilePreview): string | undefined {
+  const ext = extractExt(preview.name || preview.path)
+  // Direct extension → language mappings
+  const extMap: Record<string, string> = {
+    js: 'javascript',
+    mjs: 'javascript',
+    cjs: 'javascript',
+    ts: 'typescript',
+    tsx: 'tsx',
+    jsx: 'jsx',
+    vue: 'vue',
+    css: 'css',
+    scss: 'scss',
+    less: 'less',
+    html: 'html',
+    htm: 'html',
+    xml: 'xml',
+    json: 'json',
+    yaml: 'yaml',
+    yml: 'yaml',
+    toml: 'toml',
+    md: 'markdown',
+    mdx: 'mdx',
+    py: 'python',
+    rb: 'ruby',
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    kt: 'kotlin',
+    kts: 'kotlin',
+    scala: 'scala',
+    c: 'c',
+    cpp: 'cpp',
+    cc: 'cpp',
+    cxx: 'cpp',
+    h: 'c',
+    hpp: 'cpp',
+    hh: 'cpp',
+    hxx: 'cpp',
+    cs: 'csharp',
+    swift: 'swift',
+    sh: 'shellscript',
+    bash: 'shellscript',
+    zsh: 'shellscript',
+    fish: 'shellscript',
+    sql: 'sql',
+    php: 'php',
+    r: 'r',
+    lua: 'lua',
+    perl: 'perl',
+    pl: 'perl',
+    dart: 'dart',
+    el: 'elisp',
+    vim: 'vim',
+    dockerfile: 'dockerfile',
+    makefile: 'makefile',
+    gradle: 'gradle',
+    gitignore: 'gitignore',
+    gitattributes: 'gitignore',
+    editorconfig: 'editorconfig',
+    proto: 'proto',
+    diff: 'diff',
+    patch: 'diff',
+    ini: 'ini',
+    cfg: 'ini',
+    conf: 'ini',
+    log: 'log',
+    txt: 'plaintext',
+  }
+  if (ext && extMap[ext]) return extMap[ext]
+
+  // mimeType fallback
+  const mime = preview.mimeType?.toLowerCase() || ''
+  const mimeMap: Record<string, string> = {
+    'text/javascript': 'javascript',
+    'text/typescript': 'typescript',
+    'text/css': 'css',
+    'text/html': 'html',
+    'text/markdown': 'markdown',
+    'text/x-python': 'python',
+    'text/x-shellscript': 'shellscript',
+    'text/x-ruby': 'ruby',
+    'text/x-java': 'java',
+    'text/x-c': 'c',
+    'text/x-c++': 'cpp',
+    'text/x-csharp': 'csharp',
+    'text/x-swift': 'swift',
+    'text/x-sql': 'sql',
+    'text/x-php': 'php',
+    'text/x-r': 'r',
+    'text/x-lua': 'lua',
+    'text/x-perl': 'perl',
+    'text/x-dart': 'dart',
+    'text/x-vue': 'vue',
+    'text/xml': 'xml',
+    'application/json': 'json',
+    'application/xml': 'xml',
+    'application/yaml': 'yaml',
+    'application/toml': 'toml',
+  }
+  if (mimeMap[mime]) return mimeMap[mime]
+
+  // Special filenames
+  const name = preview.name?.toLowerCase() || ''
+  if (name === 'dockerfile') return 'dockerfile'
+  if (name === 'makefile' || name === 'gnumakefile') return 'makefile'
+  if (name === 'cmakelists.txt' || name.endsWith('.cmake')) return 'cmake'
+  if (name === '.gitignore' || name === '.gitattributes') return 'gitignore'
+  if (name === '.editorconfig') return 'editorconfig'
+  if (name === '.env' || name.startsWith('.env.')) return 'dotenv'
+
+  return undefined
+}
+
+/**
+ * Determine whether a text preview should use Shiki code highlighting.
+ * Markdown and plain text without a recognized language are excluded.
+ */
+export function isCodePreview(preview: FilePreview | null | undefined): boolean {
+  if (!preview || preview.kind !== 'text') return false
+  if (isMarkdownPreview(preview)) return false
+  const lang = resolveCodeLanguage(preview)
+  return lang !== undefined && lang !== 'plaintext' && lang !== 'log'
+}
+
+function extractExt(filename: string): string {
+  const dot = filename.lastIndexOf('.')
+  if (dot <= 0) return ''
+  return filename.slice(dot + 1).toLowerCase()
+}

@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { NAlert, NButton, NEmpty, NInput, NModal, NSpin, NSpace, NSwitch, NTag } from 'naive-ui'
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
-import { formatPreviewSize, isFormattedJsonPreview, isHtmlPreview, isMarkdownPreview, previewTextContent, resolvePreviewRenderer } from './preview'
+import { formatPreviewSize, isFormattedJsonPreview, isHtmlPreview, isMarkdownPreview, isCodePreview, previewTextContent, resolvePreviewRenderer, resolveCodeLanguage } from './preview'
 import HtmlPreview from './HtmlPreview.vue'
 import OfficePreview from './OfficePreview.vue'
 import PdfPreview from './PdfPreview.vue'
@@ -33,6 +33,8 @@ const displayedTextContent = computed(() => previewTextContent(props.preview))
 const jsonFormatted = computed(() => isFormattedJsonPreview(props.preview))
 const isMarkdown = computed(() => isMarkdownPreview(props.preview))
 const isHtml = computed(() => isHtmlPreview(props.preview))
+const isCode = computed(() => isCodePreview(props.preview))
+const codeLanguage = computed(() => props.preview ? resolveCodeLanguage(props.preview) : undefined)
 const markdownModule = ref<typeof import('marked') | null>(null)
 const markdownLoaded = ref(false)
 
@@ -41,10 +43,35 @@ const renderedMarkdown = computed(() => {
   return markdownModule.value.marked.parse(props.preview.content, { async: false }) as string
 })
 
+const shikiLoading = ref(false)
+const renderedCodeHtml = ref('')
+
 watch(isMarkdown, async (val) => {
   if (val && !markdownLoaded.value) {
     markdownModule.value = await import('marked')
     markdownLoaded.value = true
+  }
+}, { immediate: true })
+
+watch([isCode, codeLanguage, () => props.preview?.content], async ([code, lang, content]) => {
+  if (!code || !lang || !content) {
+    renderedCodeHtml.value = ''
+    return
+  }
+  if (shikiLoading.value) return
+  shikiLoading.value = true
+  try {
+    const { codeToHtml } = await import('shiki')
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    renderedCodeHtml.value = await codeToHtml(content, {
+      lang,
+      theme: isDark ? 'github-dark' : 'github-light',
+    })
+  } catch (e) {
+    console.error('Shiki highlighting failed:', e)
+    renderedCodeHtml.value = ''
+  } finally {
+    shikiLoading.value = false
   }
 }, { immediate: true })
 
@@ -160,6 +187,7 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
             @keydown.meta.s="saveEditFromKeyboard"
           />
           <div v-else-if="renderer.kind === 'text' && isMarkdown && mdViewMode === 'preview'" class="preview-markdown" v-html="renderedMarkdown" />
+          <div v-else-if="renderer.kind === 'text' && isCode && renderedCodeHtml" class="preview-code" v-html="renderedCodeHtml" />
           <pre v-else-if="renderer.kind === 'text'" class="preview-text">{{ displayedTextContent }}</pre>
           <pre v-else-if="renderer.kind === 'html' && htmlViewMode === 'source'" class="preview-text">{{ displayedTextContent }}</pre>
           <HtmlPreview v-else-if="renderer.kind === 'html' && preview" :preview="preview" />
@@ -273,6 +301,35 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
   cursor: text;
   user-select: text;
   -webkit-user-select: text;
+}
+
+.preview-code {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  align-self: stretch;
+  overflow: auto;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.preview-code :deep(pre) {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.preview-code :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .preview-editor {

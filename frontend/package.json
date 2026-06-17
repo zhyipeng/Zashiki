@@ -13,11 +13,14 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@shikijs/langs": "^4.2.0",
+    "@shikijs/themes": "^4.2.0",
     "@silurus/ooxml": "^0.57.0",
     "@wailsio/runtime": "latest",
     "marked": "^18.0.5",
     "naive-ui": "^2.44.1",
     "pinyin-pro": "^3.28.1",
+    "shiki": "^4.2.0",
     "vue": "^3.2.45",
     "vue-pdf-embed": "^2.1.4"
   },
