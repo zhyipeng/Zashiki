@@ -1669,7 +1669,7 @@ const shortcutCategoryLabels: Record<ShortcutCategory, string> = {
 }
 
 const shortcutHelpGroups = computed(() => {
-  const categories: ShortcutCategory[] = ['navigation', 'selection', 'file', 'search', 'panel', 'dialog']
+  const categories: ShortcutCategory[] = ['selection', 'search', 'navigation', 'dialog', 'file', 'panel']
   return categories
     .map(category => ({
       category,
@@ -2011,7 +2011,7 @@ useKeyboardShortcuts(() => shortcutActions, {
       v-model:show="shortcutHelpModal"
       preset="card"
       title="快捷键"
-      style="width: min(900px, 92vw)"
+      style="width: min(1080px, 92vw)"
     >
       <div class="shortcut-help">
         <div
@@ -2254,7 +2254,7 @@ useKeyboardShortcuts(() => shortcutActions, {
 
 .shortcut-help {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
 }
 
@@ -2271,7 +2271,7 @@ useKeyboardShortcuts(() => shortcutActions, {
 
 .shortcut-help-row {
   display: grid;
-  grid-template-columns: 210px 1fr;
+  grid-template-columns: 170px 1fr;
   align-items: center;
   gap: 12px;
   font-size: 13px;
