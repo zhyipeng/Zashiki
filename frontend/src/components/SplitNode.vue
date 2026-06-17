@@ -25,6 +25,7 @@ const emit = defineEmits<{
   closeOthers: [id: number]
   focus: [id: number, path: string]
   focusNext: [id: number]
+  focusPrev: [id: number]
   selectionStatus: [id: number, status: SelectionStatus]
 }>()
 
@@ -57,6 +58,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
         @close="emit('close', node.id)"
         @close-others="emit('closeOthers', node.id)"
         @focus-next="emit('focusNext', node.id)"
+        @focus-prev="emit('focusPrev', node.id)"
         @selection-status="(status: SelectionStatus) => emit('selectionStatus', node.id, status)"
       />
     </div>
@@ -82,6 +84,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           @close-others="(id) => emit('closeOthers', id)"
           @focus="(id, path) => emit('focus', id, path)"
           @focus-next="(id) => emit('focusNext', id)"
+          @focus-prev="(id) => emit('focusPrev', id)"
           @selection-status="(id, status) => emit('selectionStatus', id, status)"
         />
       </template>
@@ -99,6 +102,7 @@ function nsDir(dir: 'horizontal' | 'vertical') {
           @close-others="(id) => emit('closeOthers', id)"
           @focus="(id, path) => emit('focus', id, path)"
           @focus-next="(id) => emit('focusNext', id)"
+          @focus-prev="(id) => emit('focusPrev', id)"
           @selection-status="(id, status) => emit('selectionStatus', id, status)"
         />
       </template>

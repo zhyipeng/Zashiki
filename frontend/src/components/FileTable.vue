@@ -138,6 +138,7 @@ const emit = defineEmits<{
   close: []
   closeOthers: []
   focusNext: []
+  focusPrev: []
   selectionStatus: [status: { multiSelectMode: boolean, selectedCount: number }]
 }>()
 
@@ -1655,6 +1656,7 @@ const shortcutActions: CategorizedShortcutAction[] = [
   { id: 'close-panel', category: 'panel', label: '关闭当前面板', keys: [{ key: 'w', ctrlOrMeta: true }], run: () => emit('close'), disabled: () => !props.closable },
   { id: 'close-other-panels', category: 'panel', label: '关闭其它面板', keys: [{ key: 'w', ctrlOrMeta: true, shift: true }], run: () => emit('closeOthers'), disabled: () => !props.closable },
   { id: 'focus-next-panel', category: 'panel', label: '切换到下一个面板', keys: [{ key: 'tab' }], run: () => {}, disabled: () => true },
+  { id: 'focus-prev-panel', category: 'panel', label: '切换到上一个面板', keys: [{ key: 'tab', shift: true }], run: () => {}, disabled: () => true },
 ]
 
 const shortcutCategoryLabels: Record<ShortcutCategory, string> = {

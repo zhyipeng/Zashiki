@@ -154,6 +154,18 @@ function handleFocusNextPanel(fromLeafId: number) {
   currentPath.value = leaf.path
 }
 
+function handleFocusPreviousPanel(fromLeafId: number) {
+  const leafIds = getLeafIds(rootNode.value)
+  if (leafIds.length <= 1) return
+  const currentIndex = leafIds.indexOf(fromLeafId)
+  const prevIndex = currentIndex <= 0 ? leafIds.length - 1 : currentIndex - 1
+  const prevId = leafIds[prevIndex]
+  const leaf = findLeafById(rootNode.value, prevId)
+  if (!leaf) return
+  focusedId.value = prevId
+  currentPath.value = leaf.path
+}
+
 function handleSelectionStatus(leafId: number, status: SelectionStatus) {
   selectionStatusById.value = {
     ...selectionStatusById.value,
@@ -162,10 +174,14 @@ function handleSelectionStatus(leafId: number, status: SelectionStatus) {
 }
 
 function onGlobalKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+  if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey) return
   if (isEditableTarget(event.target)) return
   event.preventDefault()
-  handleFocusNextPanel(focusedId.value)
+  if (event.shiftKey) {
+    handleFocusPreviousPanel(focusedId.value)
+  } else {
+    handleFocusNextPanel(focusedId.value)
+  }
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -246,6 +262,7 @@ function basename(path: string): string {
                   @close-others="handleCloseOthers"
                   @focus="handleFocus"
                   @focus-next="handleFocusNextPanel"
+                  @focus-prev="handleFocusPreviousPanel"
                   @selection-status="handleSelectionStatus"
               />
             </div>
