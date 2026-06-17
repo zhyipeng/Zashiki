@@ -74,6 +74,16 @@ function loadDir(p: string) {
   FileService.ListDir(p).then((result) => {
     console.log('ListDir', p, '→', result?.length, 'entries')
     entries.value = result || []
+    // After entries are loaded, validate the remembered cursor
+    // If the remembered entry no longer exists, clear it
+    if (currentRowKey.value) {
+      const exists = entries.value.some(entry => entry.path === currentRowKey.value)
+      if (!exists) {
+        currentRowKey.value = ''
+        selectedRowKeys.value = []
+        cursorMemory.delete(p)
+      }
+    }
   }).catch((err) => {
     console.error('ListDir failed:', p, err)
     errorMsg.value = friendlyError(err, p)
@@ -388,19 +398,30 @@ function friendlyError(err: unknown, p: string): string {
 const history = ref<string[]>([])
 const historyIndex = ref(-1)
 
+// cursor memory: remembers the focused entry for each visited path
+// so that navigating back restores the cursor to the previously focused subdirectory
+const cursorMemory = new Map<string, string>()
+
 const canGoBack = computed(() => historyIndex.value > 0)
 const canGoForward = computed(() => historyIndex.value < history.value.length - 1)
 const canGoHome = computed(() => !!props.homeDir && props.path !== props.homeDir)
 const canGoUp = computed(() => parentPath.value !== null)
 
-watch(() => props.path, (newPath) => {
+watch(() => props.path, (newPath, oldPath) => {
   if (!newPath) return
   if (previewModal.value.show) {
     closePreviewModal()
   }
   exitFindMode()
   exitMultiSelectMode()
-  currentRowKey.value = ''
+  // Save cursor position for the old path before switching
+  if (oldPath && currentRowKey.value) {
+    cursorMemory.set(oldPath, currentRowKey.value)
+  }
+  // Try to restore cursor for the new path
+  const rememberedCursor = cursorMemory.get(newPath)
+  currentRowKey.value = rememberedCursor || ''
+  selectedRowKeys.value = rememberedCursor ? [rememberedCursor] : []
   const existingIndex = history.value.indexOf(newPath)
   const currentHistoryPath = historyIndex.value >= 0 ? history.value[historyIndex.value] : null
   if (newPath !== currentHistoryPath) {
