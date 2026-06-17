@@ -20,6 +20,10 @@ export const previewRenderers: PreviewRenderer[] = [
     label: '图片',
   },
   {
+    kind: 'html',
+    label: 'HTML',
+  },
+  {
     kind: 'office',
     label: 'Office',
   },
@@ -72,4 +76,9 @@ export function isMarkdownPreview(preview: FilePreview | null | undefined): bool
   const mimeType = preview.mimeType.toLowerCase()
   if (mimeType === 'text/markdown') return true
   return preview.name.toLowerCase().endsWith('.md') || preview.path.toLowerCase().endsWith('.md')
+}
+
+export function isHtmlPreview(preview: FilePreview | null | undefined): boolean {
+  if (!preview || preview.kind !== 'html') return false
+  return true
 }

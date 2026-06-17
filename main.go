@@ -2,8 +2,13 @@ package main
 
 import (
 	"embed"
-
+	"encoding/base64"
 	"log"
+	"mime"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"zashiki/internal/filemanager"
@@ -19,6 +24,76 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+const htmlAssetPrefix = "/__html_assets__/"
+
+// htmlAssetMiddleware intercepts requests to /__html_assets__/ and serves local files.
+// The path after the prefix is a base64-encoded absolute file path.
+// This allows HTML previews to reference local static resources (CSS, JS, images, etc.)
+// through the WebView's HTTP server instead of file:/// URLs which are blocked.
+func htmlAssetMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		if !strings.HasPrefix(req.URL.Path, htmlAssetPrefix) {
+			next.ServeHTTP(rw, req)
+			return
+		}
+
+		encodedPath := strings.TrimPrefix(req.URL.Path, htmlAssetPrefix)
+		decodedPath, err := base64.URLEncoding.DecodeString(encodedPath)
+		if err != nil {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte("invalid path encoding"))
+			return
+		}
+		localPath := string(decodedPath)
+
+		// Security: only allow absolute paths and prevent traversal
+		if !filepath.IsAbs(localPath) {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte("path must be absolute"))
+			return
+		}
+		cleanPath := filepath.Clean(localPath)
+		if cleanPath != localPath {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte("path contains traversal"))
+			return
+		}
+
+		info, err := os.Stat(cleanPath)
+		if err != nil {
+			rw.WriteHeader(http.StatusNotFound)
+			rw.Write([]byte("file not found"))
+			return
+		}
+		if info.IsDir() {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte("path is a directory"))
+			return
+		}
+		if info.Size() > 10*1024*1024 {
+			rw.WriteHeader(http.StatusForbidden)
+			rw.Write([]byte("file too large (>10MB)"))
+			return
+		}
+
+		data, err := os.ReadFile(cleanPath)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			rw.Write([]byte("failed to read file"))
+			return
+		}
+
+		mimeType := mime.TypeByExtension(filepath.Ext(cleanPath))
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+		rw.Header().Set("Content-Type", mimeType)
+		rw.Header().Set("Cache-Control", "no-cache")
+		rw.WriteHeader(http.StatusOK)
+		rw.Write(data)
+	})
+}
 
 func init() {
 	// Register a custom event whose associated data type is string.
@@ -45,7 +120,8 @@ func main() {
 			application.NewService(&settings.SettingsService{}),
 		},
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
+			Handler:    application.AssetFileServerFS(assets),
+			Middleware: htmlAssetMiddleware,
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,

@@ -2,7 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { NAlert, NButton, NEmpty, NInput, NModal, NSpin, NSpace, NSwitch, NTag } from 'naive-ui'
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
-import { formatPreviewSize, isFormattedJsonPreview, isMarkdownPreview, previewTextContent, resolvePreviewRenderer } from './preview'
+import { formatPreviewSize, isFormattedJsonPreview, isHtmlPreview, isMarkdownPreview, previewTextContent, resolvePreviewRenderer } from './preview'
+import HtmlPreview from './HtmlPreview.vue'
 import OfficePreview from './OfficePreview.vue'
 import PdfPreview from './PdfPreview.vue'
 
@@ -25,11 +26,13 @@ const sizeText = computed(() => formatPreviewSize(props.preview?.size ?? props.e
 const editMode = ref(false)
 const draftContent = ref('')
 const mdViewMode = ref<'preview' | 'source'>('preview')
+const htmlViewMode = ref<'preview' | 'source'>('preview')
 const canEdit = computed(() => props.preview?.kind === 'text' && !props.preview.truncated && !props.loading && !props.error)
 const hasChanges = computed(() => draftContent.value !== (props.preview?.content || ''))
 const displayedTextContent = computed(() => previewTextContent(props.preview))
 const jsonFormatted = computed(() => isFormattedJsonPreview(props.preview))
 const isMarkdown = computed(() => isMarkdownPreview(props.preview))
+const isHtml = computed(() => isHtmlPreview(props.preview))
 const markdownModule = ref<typeof import('marked') | null>(null)
 const markdownLoaded = ref(false)
 
@@ -48,6 +51,7 @@ watch(isMarkdown, async (val) => {
 watch(() => props.preview, (preview) => {
   editMode.value = false
   mdViewMode.value = 'preview'
+  htmlViewMode.value = 'preview'
   draftContent.value = preview?.kind === 'text' ? preview.content : ''
 })
 
@@ -55,6 +59,7 @@ watch(() => props.show, (show) => {
   if (!show) {
     editMode.value = false
     mdViewMode.value = 'preview'
+    htmlViewMode.value = 'preview'
   }
 })
 
@@ -113,6 +118,11 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
           <NSwitch size="small" :value="mdViewMode === 'source'" @update:value="(v: boolean) => mdViewMode = v ? 'source' : 'preview'" />
           <span>源码</span>
         </NSpace>
+        <NSpace v-if="isHtml && !editMode" class="preview-actions" size="small" align="center">
+          <span>预览</span>
+          <NSwitch size="small" :value="htmlViewMode === 'source'" @update:value="(v: boolean) => htmlViewMode = v ? 'source' : 'preview'" />
+          <span>源码</span>
+        </NSpace>
         <NSpace v-if="canEdit" class="preview-actions" size="small">
           <NButton v-if="!editMode" size="tiny" @click="enterEditMode">编辑</NButton>
           <template v-else>
@@ -127,6 +137,7 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
           'text-preview-stage': renderer.kind === 'text',
           'is-office': renderer.kind === 'office',
           'is-pdf': renderer.kind === 'pdf',
+          'is-html': renderer.kind === 'html',
         }"
         @dblclick="onPreviewStageDblclick"
       >
@@ -150,6 +161,8 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
           />
           <div v-else-if="renderer.kind === 'text' && isMarkdown && mdViewMode === 'preview'" class="preview-markdown" v-html="renderedMarkdown" />
           <pre v-else-if="renderer.kind === 'text'" class="preview-text">{{ displayedTextContent }}</pre>
+          <pre v-else-if="renderer.kind === 'html' && htmlViewMode === 'source'" class="preview-text">{{ displayedTextContent }}</pre>
+          <HtmlPreview v-else-if="renderer.kind === 'html' && preview" :preview="preview" />
           <OfficePreview v-else-if="renderer.kind === 'office' && preview" :preview="preview" />
           <PdfPreview v-else-if="renderer.kind === 'pdf' && preview" :preview="preview" />
           <NEmpty v-else :description="preview.message || '暂不支持此文件类型预览'" />
@@ -205,6 +218,15 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
 }
 
 .preview-stage.is-pdf {
+  height: min(68vh, 700px);
+  max-height: none;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+  padding: 0;
+}
+
+.preview-stage.is-html {
   height: min(68vh, 700px);
   max-height: none;
   align-items: stretch;

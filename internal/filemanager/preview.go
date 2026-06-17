@@ -14,6 +14,7 @@ import (
 
 const (
 	maxTextPreviewBytes   = 256 * 1024
+	maxHtmlPreviewBytes   = 512 * 1024
 	maxImagePreviewBytes  = 10 * 1024 * 1024
 	maxOfficePreviewBytes = 100 * 1024 * 1024
 	maxPdfPreviewBytes    = 50 * 1024 * 1024
@@ -37,6 +38,7 @@ var filePreviewProviders = []previewProvider{
 	imagePreviewProvider{},
 	officePreviewProvider{},
 	pdfPreviewProvider{},
+	htmlPreviewProvider{},
 	textPreviewProvider{},
 	unsupportedPreviewProvider{},
 }
@@ -200,6 +202,37 @@ func (textPreviewProvider) Build(ctx previewContext) (FilePreview, error) {
 	}
 
 	preview := baseFilePreview(ctx, "text")
+	preview.MimeType = mimeType
+	preview.Content = string(content)
+	preview.Truncated = ctx.size > int64(len(content))
+	return preview, nil
+}
+
+type htmlPreviewProvider struct{}
+
+func (htmlPreviewProvider) Match(ctx previewContext) bool {
+	return ctx.mimeType == "text/html" || ctx.ext == ".html" || ctx.ext == ".htm"
+}
+
+func (htmlPreviewProvider) Build(ctx previewContext) (FilePreview, error) {
+	data, err := readPreviewPrefix(ctx.path, maxHtmlPreviewBytes+utf8.UTFMax)
+	if err != nil {
+		return FilePreview{}, err
+	}
+
+	content, ok := validTextPreviewContent(data, maxHtmlPreviewBytes)
+	if !ok {
+		preview := baseFilePreview(ctx, "unsupported")
+		preview.Message = "此文件不是可识别的 HTML"
+		return preview, nil
+	}
+
+	mimeType := ctx.mimeType
+	if mimeType == "" {
+		mimeType = "text/html"
+	}
+
+	preview := baseFilePreview(ctx, "html")
 	preview.MimeType = mimeType
 	preview.Content = string(content)
 	preview.Truncated = ctx.size > int64(len(content))
