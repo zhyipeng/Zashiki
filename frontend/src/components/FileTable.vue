@@ -30,7 +30,7 @@ import {
   normalizeFindModeText,
 } from './findMode'
 import type { FindModeTarget } from './findMode'
-import { pageEntryOffset } from './fileTableNavigation'
+import { pageEntryOffset, navigationMouseAction } from './fileTableNavigation'
 import { joinPath, parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
@@ -523,6 +523,14 @@ function goUp() {
 function goHome() {
   if (!canGoHome.value) return
   emit('navigate', props.homeDir)
+}
+
+function onFileTableMousedown(event: MouseEvent) {
+  const action = navigationMouseAction(event.button)
+  if (!action) return
+  event.preventDefault()
+  if (action === 'back') goBack()
+  else goForward()
 }
 
 const parentPath = computed(() => {
@@ -1697,6 +1705,7 @@ useKeyboardShortcuts(() => shortcutActions, {
     :class="{ 'find-mode-active': findModeActive }"
     tabindex="-1"
     @pointerdown="activateShortcutScope"
+    @mousedown="onFileTableMousedown"
     @focusin="activateShortcutScope"
     @keydown.capture="onFileTableKeydown"
   >
