@@ -19,6 +19,7 @@ import { useFileClipboard } from '../composables/useFileClipboard'
 import { formatShortcutBinding, useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
 import { notifyDirectoriesChanged, useDirectoryEvents } from '../composables/useDirectoryEvents'
+import { trackOperationPromise, isOperationCancelledError } from '../composables/useOperationProgress'
 import { useFileOperationHistory } from '../composables/useFileOperationHistory'
 import DropConfirmModal from './DropConfirmModal.vue'
 import FilePreviewModal from './FilePreviewModal.vue'
@@ -1124,13 +1125,18 @@ async function pasteClipboardEntriesToDir(targetDir: string) {
   const clipboard = fileClipboard.clipboard.value
   if (!clipboard) return
   const { paths, mode } = clipboard
-  if (mode === 'cut') {
-    const results = await FileService.MoveEntries(paths, targetDir, 'rename')
-    operationHistory.recordMove(results)
-    fileClipboard.clearClipboard()
-  } else {
-    const results = await FileService.CopyEntries(paths, targetDir, 'rename')
-    operationHistory.recordCopy(results)
+  try {
+    if (mode === 'cut') {
+      const results = await trackOperationPromise(FileService.MoveEntries(paths, targetDir, 'rename'))
+      operationHistory.recordMove(results)
+      fileClipboard.clearClipboard()
+    } else {
+      const results = await trackOperationPromise(FileService.CopyEntries(paths, targetDir, 'rename'))
+      operationHistory.recordCopy(results)
+    }
+  } catch (err) {
+    if (isOperationCancelledError(err)) return
+    throw err
   }
   notifyDirectoriesChanged([targetDir, ...sourceDirsForPaths(paths)])
 }
@@ -1337,9 +1343,9 @@ async function confirmDeleteEntry() {
     const paths = entries.map(entry => entry.path)
     let deletedPaths: string[]
     if (permanent) {
-      deletedPaths = await FileService.DeleteEntries(paths)
+      deletedPaths = await trackOperationPromise(FileService.DeleteEntries(paths))
     } else {
-      const results = await FileService.TrashEntries(paths)
+      const results = await trackOperationPromise(FileService.TrashEntries(paths))
       operationHistory.recordTrash(results)
       deletedPaths = results.map(result => result.sourcePath)
     }
@@ -1347,6 +1353,11 @@ async function confirmDeleteEntry() {
     removeEntries(deletedPaths, fallbackIndex)
     notifyDirectoriesChanged([props.path], { exclude: directoryEventToken })
   } catch (err) {
+    if (isOperationCancelledError(err)) {
+      closeDeleteConfirmModal()
+      notifyDirectoriesChanged([props.path])
+      return
+    }
     console.error('Delete entry failed:', err)
     message.error(friendlyActionError(err))
   }

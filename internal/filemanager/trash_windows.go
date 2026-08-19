@@ -3,6 +3,7 @@
 package filemanager
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,7 +39,7 @@ func getTrashInfo() TrashInfo {
 	return TrashInfo{Label: "回收站", Available: true}
 }
 
-func trashEntry(path string) (string, error) {
+func trashEntry(_ context.Context, path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", err

@@ -177,6 +177,89 @@ export class FilePreview {
     }
 }
 
+export enum OperationKind {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    OperationKindCopy = "copy",
+    OperationKindMove = "move",
+    OperationKindDelete = "delete",
+    OperationKindTrash = "trash",
+};
+
+/**
+ * OperationProgress is emitted to the frontend via the Wails event system
+ * while a batch file operation is running.
+ */
+export class OperationProgress {
+    "operationId": string;
+    "kind": OperationKind;
+    "phase": OperationProgressPhase;
+    "totalItems": number;
+    "doneItems": number;
+
+    /**
+     * -1 when unknown yet
+     */
+    "totalBytes": number;
+    "doneBytes": number;
+    "currentName": string;
+    "error"?: string;
+
+    /** Creates a new OperationProgress instance. */
+    constructor($$source: Partial<OperationProgress> = {}) {
+        if (!("operationId" in $$source)) {
+            this["operationId"] = "";
+        }
+        if (!("kind" in $$source)) {
+            this["kind"] = OperationKind.$zero;
+        }
+        if (!("phase" in $$source)) {
+            this["phase"] = OperationProgressPhase.$zero;
+        }
+        if (!("totalItems" in $$source)) {
+            this["totalItems"] = 0;
+        }
+        if (!("doneItems" in $$source)) {
+            this["doneItems"] = 0;
+        }
+        if (!("totalBytes" in $$source)) {
+            this["totalBytes"] = 0;
+        }
+        if (!("doneBytes" in $$source)) {
+            this["doneBytes"] = 0;
+        }
+        if (!("currentName" in $$source)) {
+            this["currentName"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new OperationProgress instance from a string or object.
+     */
+    static createFrom($$source: any = {}): OperationProgress {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new OperationProgress($$parsedSource as Partial<OperationProgress>);
+    }
+}
+
+export enum OperationProgressPhase {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    OperationProgressPhaseScan = "scan",
+    OperationProgressPhaseRun = "run",
+    OperationProgressPhaseDone = "done",
+    OperationProgressPhaseError = "error",
+    OperationProgressPhaseCancelled = "cancelled",
+};
+
 export class RootEntry {
     "name": string;
     "path": string;

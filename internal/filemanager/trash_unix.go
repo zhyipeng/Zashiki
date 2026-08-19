@@ -3,6 +3,7 @@
 package filemanager
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -15,7 +16,7 @@ func getTrashInfo() TrashInfo {
 	return TrashInfo{Label: "回收站", Path: trashFilesDir(), Available: true}
 }
 
-func trashEntry(path string) (string, error) {
+func trashEntry(ctx context.Context, path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
@@ -34,7 +35,7 @@ func trashEntry(path string) (string, error) {
 		return "", fmt.Errorf("failed to create unique trash name for %q", path)
 	}
 	if err := os.Rename(abs, target); err != nil {
-		if err := copyEntry(abs, target); err != nil {
+		if err := copyEntry(ctx, abs, target, newCancellationCleaner(), noopByteCounter{}); err != nil {
 			return "", err
 		}
 		if err := os.RemoveAll(abs); err != nil {

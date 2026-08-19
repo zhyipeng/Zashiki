@@ -11,6 +11,9 @@ export {
     EntryPathPair,
     FileEntry,
     FilePreview,
+    OperationKind,
+    OperationProgress,
+    OperationProgressPhase,
     RootEntry,
     TrashInfo
 } from "./models.js";

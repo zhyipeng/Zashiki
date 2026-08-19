@@ -3,6 +3,7 @@ import { useMessage } from 'naive-ui'
 import type { EntryOperationResult, FileEntry } from '../../bindings/zashiki/internal/filemanager'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { notifyDirectoriesChanged } from './useDirectoryEvents'
+import { isOperationCancelledError, trackOperationPromise } from './useOperationProgress'
 
 export const FILE_EXPLORER_DRAG_MIME = 'application/x-file-explorer-paths'
 
@@ -165,13 +166,17 @@ export function useDragDrop(currentPath: () => string, options: DragDropOptions 
     try {
       let results: EntryOperationResult[]
       if (action === 'move') {
-        results = await FileService.MoveEntries(drop.paths, drop.targetDir, conflict)
+        results = await trackOperationPromise(FileService.MoveEntries(drop.paths, drop.targetDir, conflict))
       } else {
-        results = await FileService.CopyEntries(drop.paths, drop.targetDir, conflict)
+        results = await trackOperationPromise(FileService.CopyEntries(drop.paths, drop.targetDir, conflict))
       }
       options.onOperationComplete?.(action, results)
       notifyDirectoriesChanged([drop.sourcePanel, drop.targetDir])
     } catch (err) {
+      if (isOperationCancelledError(err)) {
+        notifyDirectoriesChanged([drop.sourcePanel, drop.targetDir])
+        return
+      }
       console.error('Drop operation failed:', err)
       message.error(friendlyDropError(err))
     }

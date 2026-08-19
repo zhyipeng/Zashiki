@@ -1,6 +1,7 @@
 package filemanager
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -169,7 +170,7 @@ func TestFileService_DeleteEntries(t *testing.T) {
 	}
 
 	s := &FileService{}
-	deleted, err := s.DeleteEntries([]string{file, subdir})
+	deleted, err := s.DeleteEntries(context.Background(), []string{file, subdir})
 	if err != nil {
 		t.Fatalf("DeleteEntries() error = %v", err)
 	}
@@ -203,7 +204,7 @@ func TestFileService_DeleteEmptyFolderRejectsNonEmpty(t *testing.T) {
 func TestFileService_DeleteEntriesRejectsRoot(t *testing.T) {
 	root := filepath.VolumeName(t.TempDir()) + string(filepath.Separator)
 	s := &FileService{}
-	if _, err := s.DeleteEntries([]string{root}); err == nil {
+	if _, err := s.DeleteEntries(context.Background(), []string{root}); err == nil {
 		t.Fatal("DeleteEntries() expected error for filesystem root")
 	}
 }
@@ -216,7 +217,7 @@ func TestFileService_CopyEntriesRejectsDirectoryToItself(t *testing.T) {
 	}
 
 	s := &FileService{}
-	_, err := s.CopyEntries([]string{src}, dir, "overwrite")
+	_, err := s.CopyEntries(context.Background(), []string{src}, dir, "overwrite")
 	if err == nil {
 		t.Fatal("CopyEntries() expected error when copying directory to itself")
 	}
@@ -233,7 +234,7 @@ func TestFileService_CopyEntriesAllowsRenameConflictInSameParent(t *testing.T) {
 	}
 
 	s := &FileService{}
-	results, err := s.CopyEntries([]string{src}, dir, "rename")
+	results, err := s.CopyEntries(context.Background(), []string{src}, dir, "rename")
 	if err != nil {
 		t.Fatalf("CopyEntries() error = %v", err)
 	}
@@ -257,7 +258,7 @@ func TestFileService_CopyEntriesToTargets(t *testing.T) {
 	}
 
 	s := &FileService{}
-	results, err := s.CopyEntriesToTargets([]EntryPathPair{{SourcePath: src, TargetPath: target}})
+	results, err := s.CopyEntriesToTargets(context.Background(), []EntryPathPair{{SourcePath: src, TargetPath: target}})
 	if err != nil {
 		t.Fatalf("CopyEntriesToTargets() error = %v", err)
 	}
@@ -281,7 +282,7 @@ func TestFileService_CopyEntriesToTargetsRejectsExistingTarget(t *testing.T) {
 	}
 
 	s := &FileService{}
-	if _, err := s.CopyEntriesToTargets([]EntryPathPair{{SourcePath: src, TargetPath: target}}); err == nil {
+	if _, err := s.CopyEntriesToTargets(context.Background(), []EntryPathPair{{SourcePath: src, TargetPath: target}}); err == nil {
 		t.Fatal("CopyEntriesToTargets() expected error for existing target")
 	}
 }
@@ -295,7 +296,7 @@ func TestFileService_MoveEntriesToTargets(t *testing.T) {
 	}
 
 	s := &FileService{}
-	results, err := s.MoveEntriesToTargets([]EntryPathPair{{SourcePath: src, TargetPath: target}})
+	results, err := s.MoveEntriesToTargets(context.Background(), []EntryPathPair{{SourcePath: src, TargetPath: target}})
 	if err != nil {
 		t.Fatalf("MoveEntriesToTargets() error = %v", err)
 	}
@@ -336,7 +337,7 @@ func TestFileService_CopyEntriesRejectsDirectoryToChild(t *testing.T) {
 	}
 
 	s := &FileService{}
-	_, err := s.CopyEntries([]string{src}, destDir, "overwrite")
+	_, err := s.CopyEntries(context.Background(), []string{src}, destDir, "overwrite")
 	if err == nil {
 		t.Fatal("CopyEntries() expected error when copying directory to child")
 	}
@@ -358,7 +359,7 @@ func TestFileService_MoveEntriesRejectsDirectoryToChildWithoutDeletingSource(t *
 	}
 
 	s := &FileService{}
-	_, err := s.MoveEntries([]string{src}, destDir, "overwrite")
+	_, err := s.MoveEntries(context.Background(), []string{src}, destDir, "overwrite")
 	if err == nil {
 		t.Fatal("MoveEntries() expected error when moving directory to child")
 	}

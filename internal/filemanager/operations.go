@@ -1,12 +1,17 @@
 package filemanager
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
+	"sync"
 )
 
 func (f *FileService) CheckConflicts(paths []string, destDir string) ([]string, error) {
@@ -113,17 +118,27 @@ func (f *FileService) RenameEntry(path string, name string) (FileEntry, error) {
 	return fileEntryFromInfo(newInfo.Name(), dst, newInfo), nil
 }
 
-func (f *FileService) DeleteEntries(paths []string) ([]string, error) {
+func (f *FileService) DeleteEntries(ctx context.Context, paths []string) ([]string, error) {
+	emitter := newProgressEmitter(OperationKindDelete, len(paths), paths)
 	deleted := make([]string, 0, len(paths))
 	for _, path := range paths {
+		if ctx.Err() != nil {
+			emitter.finish(ctx.Err(), true)
+			return deleted, ctx.Err()
+		}
 		if err := validateDeletePath(path); err != nil {
+			emitter.finish(err, false)
 			return deleted, err
 		}
+		emitter.setCurrentName(filepath.Base(path))
 		if err := os.RemoveAll(path); err != nil {
+			emitter.finish(err, false)
 			return deleted, err
 		}
 		deleted = append(deleted, path)
+		emitter.itemDone()
 	}
+	emitter.finish(nil, false)
 	return deleted, nil
 }
 
@@ -144,12 +159,22 @@ func (f *FileService) DeleteEmptyFolder(path string) (string, error) {
 	return path, nil
 }
 
-func (f *FileService) CopyEntries(paths []string, destDir string, conflict string) ([]EntryOperationResult, error) {
+func (f *FileService) CopyEntries(ctx context.Context, paths []string, destDir string, conflict string) ([]EntryOperationResult, error) {
 	log.Printf("CopyEntries to %s, conflict=%s, files: %+v", destDir, conflict, paths)
+	emitter := newProgressEmitter(OperationKindCopy, len(paths), paths)
+	emitter.scanTotalBytesAsync(ctx, paths)
+	created := newCancellationCleaner()
 	results := make([]EntryOperationResult, 0, len(paths))
 	for _, src := range paths {
+		if ctx.Err() != nil {
+			created.cleanup()
+			emitter.finish(ctx.Err(), true)
+			return results, ctx.Err()
+		}
 		dst, overwritten, err := resolveDst(src, destDir, conflict)
 		if err != nil {
+			created.cleanup()
+			emitter.finish(err, false)
 			return results, err
 		}
 		if dst == "" {
@@ -157,9 +182,13 @@ func (f *FileService) CopyEntries(paths []string, destDir string, conflict strin
 				SourcePath: src,
 				Skipped:    true,
 			})
+			emitter.itemDone()
 			continue // skip
 		}
-		if err := copyEntry(src, dst); err != nil {
+		emitter.setCurrentName(filepath.Base(src))
+		if err := copyEntry(ctx, src, dst, created, emitter); err != nil {
+			created.cleanup()
+			emitter.finish(err, errors.Is(err, context.Canceled))
 			return results, err
 		}
 		results = append(results, EntryOperationResult{
@@ -167,16 +196,28 @@ func (f *FileService) CopyEntries(paths []string, destDir string, conflict strin
 			TargetPath:  dst,
 			Overwritten: overwritten,
 		})
+		emitter.itemDone()
 	}
+	emitter.finish(nil, false)
 	return results, nil
 }
 
-func (f *FileService) MoveEntries(paths []string, destDir string, conflict string) ([]EntryOperationResult, error) {
+func (f *FileService) MoveEntries(ctx context.Context, paths []string, destDir string, conflict string) ([]EntryOperationResult, error) {
 	log.Printf("MoveEntries to %s, conflict=%s, files: %+v", destDir, conflict, paths)
+	emitter := newProgressEmitter(OperationKindMove, len(paths), paths)
+	emitter.scanTotalBytesAsync(ctx, paths)
+	created := newCancellationCleaner()
 	results := make([]EntryOperationResult, 0, len(paths))
 	for _, src := range paths {
+		if ctx.Err() != nil {
+			created.cleanup()
+			emitter.finish(ctx.Err(), true)
+			return results, ctx.Err()
+		}
 		dst, overwritten, err := resolveDst(src, destDir, conflict)
 		if err != nil {
+			created.cleanup()
+			emitter.finish(err, false)
 			return results, err
 		}
 		if dst == "" {
@@ -184,13 +225,20 @@ func (f *FileService) MoveEntries(paths []string, destDir string, conflict strin
 				SourcePath: src,
 				Skipped:    true,
 			})
+			emitter.itemDone()
 			continue
 		}
+		emitter.setCurrentName(filepath.Base(src))
 		if err := os.Rename(src, dst); err != nil {
-			if err := copyEntry(src, dst); err != nil {
+			// Cross-device fallback: copy then remove the source.
+			if err := copyEntry(ctx, src, dst, created, emitter); err != nil {
+				created.cleanup()
+				emitter.finish(err, errors.Is(err, context.Canceled))
 				return results, err
 			}
 			if err := os.RemoveAll(src); err != nil {
+				created.cleanup()
+				emitter.finish(err, false)
 				return results, err
 			}
 		}
@@ -199,45 +247,77 @@ func (f *FileService) MoveEntries(paths []string, destDir string, conflict strin
 			TargetPath:  dst,
 			Overwritten: overwritten,
 		})
+		emitter.itemDone()
 	}
+	emitter.finish(nil, false)
 	return results, nil
 }
 
-func (f *FileService) CopyEntriesToTargets(pairs []EntryPathPair) ([]EntryOperationResult, error) {
+func (f *FileService) CopyEntriesToTargets(ctx context.Context, pairs []EntryPathPair) ([]EntryOperationResult, error) {
+	emitter := newProgressEmitter(OperationKindCopy, len(pairs), pairSources(pairs))
+	created := newCancellationCleaner()
 	results := make([]EntryOperationResult, 0, len(pairs))
 	for _, pair := range pairs {
+		if ctx.Err() != nil {
+			created.cleanup()
+			emitter.finish(ctx.Err(), true)
+			return results, ctx.Err()
+		}
 		if err := validateExactTarget(pair.SourcePath, pair.TargetPath); err != nil {
+			created.cleanup()
+			emitter.finish(err, false)
 			return results, err
 		}
-		if err := copyEntry(pair.SourcePath, pair.TargetPath); err != nil {
+		emitter.setCurrentName(filepath.Base(pair.SourcePath))
+		if err := copyEntry(ctx, pair.SourcePath, pair.TargetPath, created, emitter); err != nil {
+			created.cleanup()
+			emitter.finish(err, errors.Is(err, context.Canceled))
 			return results, err
 		}
 		results = append(results, EntryOperationResult{
 			SourcePath: pair.SourcePath,
 			TargetPath: pair.TargetPath,
 		})
+		emitter.itemDone()
 	}
+	emitter.finish(nil, false)
 	return results, nil
 }
 
-func (f *FileService) MoveEntriesToTargets(pairs []EntryPathPair) ([]EntryOperationResult, error) {
+func (f *FileService) MoveEntriesToTargets(ctx context.Context, pairs []EntryPathPair) ([]EntryOperationResult, error) {
+	emitter := newProgressEmitter(OperationKindMove, len(pairs), pairSources(pairs))
+	created := newCancellationCleaner()
 	results := make([]EntryOperationResult, 0, len(pairs))
 	for _, pair := range pairs {
+		if ctx.Err() != nil {
+			created.cleanup()
+			emitter.finish(ctx.Err(), true)
+			return results, ctx.Err()
+		}
 		if filepath.Clean(pair.SourcePath) == filepath.Clean(pair.TargetPath) {
 			results = append(results, EntryOperationResult{
 				SourcePath: pair.SourcePath,
 				TargetPath: pair.TargetPath,
 			})
+			emitter.itemDone()
 			continue
 		}
 		if err := validateExactTarget(pair.SourcePath, pair.TargetPath); err != nil {
+			created.cleanup()
+			emitter.finish(err, false)
 			return results, err
 		}
+		emitter.setCurrentName(filepath.Base(pair.SourcePath))
 		if err := os.Rename(pair.SourcePath, pair.TargetPath); err != nil {
-			if err := copyEntry(pair.SourcePath, pair.TargetPath); err != nil {
+			// Cross-device fallback: copy then remove the source.
+			if err := copyEntry(ctx, pair.SourcePath, pair.TargetPath, created, emitter); err != nil {
+				created.cleanup()
+				emitter.finish(err, errors.Is(err, context.Canceled))
 				return results, err
 			}
 			if err := os.RemoveAll(pair.SourcePath); err != nil {
+				created.cleanup()
+				emitter.finish(err, false)
 				return results, err
 			}
 		}
@@ -245,8 +325,18 @@ func (f *FileService) MoveEntriesToTargets(pairs []EntryPathPair) ([]EntryOperat
 			SourcePath: pair.SourcePath,
 			TargetPath: pair.TargetPath,
 		})
+		emitter.itemDone()
 	}
+	emitter.finish(nil, false)
 	return results, nil
+}
+
+func pairSources(pairs []EntryPathPair) []string {
+	sources := make([]string, 0, len(pairs))
+	for _, pair := range pairs {
+		sources = append(sources, pair.SourcePath)
+	}
+	return sources
 }
 
 func resolveDst(src, destDir, conflict string) (string, bool, error) {
@@ -369,19 +459,76 @@ func uniquePath(path string) string {
 	return ""
 }
 
-func copyEntry(src, dst string) error {
+// cancellationCleaner remembers destinations created by the current batch so
+// a cancelled operation can remove them, restoring the "nothing happened"
+// semantics. Overwritten destinations cannot be restored and are not tracked.
+type cancellationCleaner struct {
+	mu    sync.Mutex
+	paths []string
+}
+
+func newCancellationCleaner() *cancellationCleaner {
+	return &cancellationCleaner{}
+}
+
+func (c *cancellationCleaner) track(path string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.paths = append(c.paths, path)
+}
+
+func (c *cancellationCleaner) cleanup() {
+	c.mu.Lock()
+	paths := c.paths
+	c.paths = nil
+	c.mu.Unlock()
+	// Remove deepest paths first so tracked parents are emptied before removal.
+	sort.Sort(sort.Reverse(sort.StringSlice(paths)))
+	for _, path := range paths {
+		_ = os.RemoveAll(path)
+	}
+}
+
+// byteCounter receives copied-byte ticks for progress reporting.
+type byteCounter interface {
+	bytesCopied(n int64)
+}
+
+// noopByteCounter discards byte ticks for call sites without progress needs.
+type noopByteCounter struct{}
+
+func (noopByteCounter) bytesCopied(int64) {}
+
+func copyEntry(ctx context.Context, src, dst string, created *cancellationCleaner, counter byteCounter) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return err
 	}
 	if srcInfo.IsDir() {
-		return copyDir(src, dst)
+		return copyDir(ctx, src, dst, created, counter)
 	}
-	return copyFile(src, dst)
+	return copyFile(ctx, src, dst, created, counter)
 }
 
-func copyFile(src, dst string) error {
+const copyBufferSize = 256 * 1024
+
+func copyFile(ctx context.Context, src, dst string, created *cancellationCleaner, counter byteCounter) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+
+	// Only track the destination for cleanup when we are about to create it;
+	// overwriting an existing file must not be rolled back.
+	dstExisted := false
+	if _, err := os.Lstat(dst); err == nil {
+		dstExisted = true
+	} else if !os.IsNotExist(err) {
 		return err
 	}
 
@@ -395,21 +542,54 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer dstF.Close()
+	if !dstExisted {
+		created.track(dst)
+	}
 
-	if _, err := dstF.ReadFrom(srcF); err != nil {
-		return err
+	buf := make([]byte, copyBufferSize)
+	for {
+		if err := ctx.Err(); err != nil {
+			dstF.Close()
+			return err
+		}
+		n, readErr := srcF.Read(buf)
+		if n > 0 {
+			if _, writeErr := dstF.Write(buf[:n]); writeErr != nil {
+				dstF.Close()
+				return writeErr
+			}
+			counter.bytesCopied(int64(n))
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			dstF.Close()
+			return readErr
+		}
 	}
 	return dstF.Close()
 }
 
-func copyDir(src, dst string) error {
+func copyDir(ctx context.Context, src, dst string, created *cancellationCleaner, counter byteCounter) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return err
 	}
+	dstExisted := false
+	if _, err := os.Lstat(dst); err == nil {
+		dstExisted = true
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
 		return err
+	}
+	if !dstExisted {
+		created.track(dst)
 	}
 
 	entries, err := os.ReadDir(src)
@@ -418,9 +598,12 @@ func copyDir(src, dst string) error {
 	}
 
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
-		if err := copyEntry(srcPath, dstPath); err != nil {
+		if err := copyEntry(ctx, srcPath, dstPath, created, counter); err != nil {
 			return err
 		}
 	}

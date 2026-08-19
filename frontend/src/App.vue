@@ -8,8 +8,10 @@ import type {TreeNode} from './components/tree'
 import {FileService} from '../bindings/zashiki/internal/filemanager'
 import { Settings28Regular } from '@vicons/fluent'
 import SettingsModal from './components/SettingsModal.vue'
+import OperationProgressbar from './components/OperationProgressbar.vue'
 import { useTheme } from './composables/useTheme'
 import { useFileClipboard } from './composables/useFileClipboard'
+import { bindOperationProgressEvents } from './composables/useOperationProgress'
 
 const showSettings = ref(false)
 const { isDarkTheme, mountTheme } = useTheme()
@@ -51,6 +53,7 @@ const appStatusItems = computed(() => [clipboardStatusText.value, selectionStatu
 
 onMounted(async () => {
   cleanupTheme = mountTheme()
+  bindOperationProgressEvents()
   window.addEventListener('keydown', onGlobalKeydown)
   try {
     const [home, sep, rootDirs, trash] = await Promise.all([
@@ -268,6 +271,7 @@ function basename(path: string): string {
             </div>
           </template>
         </NSplit>
+        <OperationProgressbar />
         <SettingsModal v-model:show="showSettings" />
       </div>
     </NMessageProvider>
