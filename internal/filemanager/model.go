@@ -45,3 +45,46 @@ type EntryPathPair struct {
 	SourcePath string `json:"sourcePath"`
 	TargetPath string `json:"targetPath"`
 }
+
+type SyncConfig struct {
+	SourceDir      string   `json:"sourceDir"`
+	TargetDir      string   `json:"targetDir"`
+	Mode           string   `json:"mode"`           // "mirror" | "incremental"
+	CompareSize    bool     `json:"compareSize"`    // 判重维度：文件大小
+	CompareModTime bool     `json:"compareModTime"` // 判重维度：修改时间
+	CompareHash    bool     `json:"compareHash"`    // 判重维度：SHA-256 内容哈希
+	IgnoreHidden   bool     `json:"ignoreHidden"`   // 忽略隐藏文件
+	IgnorePatterns []string `json:"ignorePatterns"` // 名字精确匹配 + filepath.Match 通配符
+}
+
+type SyncCopyAction struct {
+	RelPath string `json:"relPath"`
+	Reason  string `json:"reason"` // 新增 | 大小不同 | 时间不同 | 内容不同 | 新增目录
+}
+
+type SyncDeleteAction struct {
+	RelPath string `json:"relPath"`
+	IsDir   bool   `json:"isDir"`
+}
+
+type SyncItemError struct {
+	RelPath string `json:"relPath"`
+	Op      string `json:"op"` // analyze | copy | delete | cleanup
+	Error   string `json:"error"`
+}
+
+type SyncPlan struct {
+	Copy         []SyncCopyAction   `json:"copy"`
+	Delete       []SyncDeleteAction `json:"delete"`
+	SkippedCount int                `json:"skippedCount"`
+	Errors       []SyncItemError    `json:"errors"`
+}
+
+type SyncResult struct {
+	Status       string          `json:"status"` // "done" | "cancelled"
+	Copied       int             `json:"copied"`
+	Deleted      int             `json:"deleted"`
+	RemovedDirs  int             `json:"removedDirs"`
+	SkippedCount int             `json:"skippedCount"`
+	Errors       []SyncItemError `json:"errors"`
+}

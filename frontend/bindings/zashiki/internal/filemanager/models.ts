@@ -187,6 +187,7 @@ export enum OperationKind {
     OperationKindMove = "move",
     OperationKindDelete = "delete",
     OperationKindTrash = "trash",
+    OperationKindSync = "sync",
 };
 
 /**
@@ -293,6 +294,263 @@ export class RootEntry {
     }
 }
 
+export class SyncConfig {
+    "sourceDir": string;
+    "targetDir": string;
+
+    /**
+     * "mirror" | "incremental"
+     */
+    "mode": string;
+
+    /**
+     * 判重维度：文件大小
+     */
+    "compareSize": boolean;
+
+    /**
+     * 判重维度：修改时间
+     */
+    "compareModTime": boolean;
+
+    /**
+     * 判重维度：SHA-256 内容哈希
+     */
+    "compareHash": boolean;
+
+    /**
+     * 忽略隐藏文件
+     */
+    "ignoreHidden": boolean;
+
+    /**
+     * 名字精确匹配 + filepath.Match 通配符
+     */
+    "ignorePatterns": string[];
+
+    /** Creates a new SyncConfig instance. */
+    constructor($$source: Partial<SyncConfig> = {}) {
+        if (!("sourceDir" in $$source)) {
+            this["sourceDir"] = "";
+        }
+        if (!("targetDir" in $$source)) {
+            this["targetDir"] = "";
+        }
+        if (!("mode" in $$source)) {
+            this["mode"] = "";
+        }
+        if (!("compareSize" in $$source)) {
+            this["compareSize"] = false;
+        }
+        if (!("compareModTime" in $$source)) {
+            this["compareModTime"] = false;
+        }
+        if (!("compareHash" in $$source)) {
+            this["compareHash"] = false;
+        }
+        if (!("ignoreHidden" in $$source)) {
+            this["ignoreHidden"] = false;
+        }
+        if (!("ignorePatterns" in $$source)) {
+            this["ignorePatterns"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SyncConfig instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SyncConfig {
+        const $$createField7_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("ignorePatterns" in $$parsedSource) {
+            $$parsedSource["ignorePatterns"] = $$createField7_0($$parsedSource["ignorePatterns"]);
+        }
+        return new SyncConfig($$parsedSource as Partial<SyncConfig>);
+    }
+}
+
+export class SyncCopyAction {
+    "relPath": string;
+
+    /**
+     * 新增 | 大小不同 | 时间不同 | 内容不同 | 新增目录
+     */
+    "reason": string;
+
+    /** Creates a new SyncCopyAction instance. */
+    constructor($$source: Partial<SyncCopyAction> = {}) {
+        if (!("relPath" in $$source)) {
+            this["relPath"] = "";
+        }
+        if (!("reason" in $$source)) {
+            this["reason"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SyncCopyAction instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SyncCopyAction {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SyncCopyAction($$parsedSource as Partial<SyncCopyAction>);
+    }
+}
+
+export class SyncDeleteAction {
+    "relPath": string;
+    "isDir": boolean;
+
+    /** Creates a new SyncDeleteAction instance. */
+    constructor($$source: Partial<SyncDeleteAction> = {}) {
+        if (!("relPath" in $$source)) {
+            this["relPath"] = "";
+        }
+        if (!("isDir" in $$source)) {
+            this["isDir"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SyncDeleteAction instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SyncDeleteAction {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SyncDeleteAction($$parsedSource as Partial<SyncDeleteAction>);
+    }
+}
+
+export class SyncItemError {
+    "relPath": string;
+
+    /**
+     * analyze | copy | delete | cleanup
+     */
+    "op": string;
+    "error": string;
+
+    /** Creates a new SyncItemError instance. */
+    constructor($$source: Partial<SyncItemError> = {}) {
+        if (!("relPath" in $$source)) {
+            this["relPath"] = "";
+        }
+        if (!("op" in $$source)) {
+            this["op"] = "";
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SyncItemError instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SyncItemError {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SyncItemError($$parsedSource as Partial<SyncItemError>);
+    }
+}
+
+export class SyncPlan {
+    "copy": SyncCopyAction[];
+    "delete": SyncDeleteAction[];
+    "skippedCount": number;
+    "errors": SyncItemError[];
+
+    /** Creates a new SyncPlan instance. */
+    constructor($$source: Partial<SyncPlan> = {}) {
+        if (!("copy" in $$source)) {
+            this["copy"] = [];
+        }
+        if (!("delete" in $$source)) {
+            this["delete"] = [];
+        }
+        if (!("skippedCount" in $$source)) {
+            this["skippedCount"] = 0;
+        }
+        if (!("errors" in $$source)) {
+            this["errors"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SyncPlan instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SyncPlan {
+        const $$createField0_0 = $$createType2;
+        const $$createField1_0 = $$createType4;
+        const $$createField3_0 = $$createType6;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("copy" in $$parsedSource) {
+            $$parsedSource["copy"] = $$createField0_0($$parsedSource["copy"]);
+        }
+        if ("delete" in $$parsedSource) {
+            $$parsedSource["delete"] = $$createField1_0($$parsedSource["delete"]);
+        }
+        if ("errors" in $$parsedSource) {
+            $$parsedSource["errors"] = $$createField3_0($$parsedSource["errors"]);
+        }
+        return new SyncPlan($$parsedSource as Partial<SyncPlan>);
+    }
+}
+
+export class SyncResult {
+    /**
+     * "done" | "cancelled"
+     */
+    "status": string;
+    "copied": number;
+    "deleted": number;
+    "removedDirs": number;
+    "skippedCount": number;
+    "errors": SyncItemError[];
+
+    /** Creates a new SyncResult instance. */
+    constructor($$source: Partial<SyncResult> = {}) {
+        if (!("status" in $$source)) {
+            this["status"] = "";
+        }
+        if (!("copied" in $$source)) {
+            this["copied"] = 0;
+        }
+        if (!("deleted" in $$source)) {
+            this["deleted"] = 0;
+        }
+        if (!("removedDirs" in $$source)) {
+            this["removedDirs"] = 0;
+        }
+        if (!("skippedCount" in $$source)) {
+            this["skippedCount"] = 0;
+        }
+        if (!("errors" in $$source)) {
+            this["errors"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SyncResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SyncResult {
+        const $$createField5_0 = $$createType6;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("errors" in $$parsedSource) {
+            $$parsedSource["errors"] = $$createField5_0($$parsedSource["errors"]);
+        }
+        return new SyncResult($$parsedSource as Partial<SyncResult>);
+    }
+}
+
 export class TrashInfo {
     "label": string;
     "path": string;
@@ -321,3 +579,12 @@ export class TrashInfo {
         return new TrashInfo($$parsedSource as Partial<TrashInfo>);
     }
 }
+
+// Private type creation functions
+const $$createType0 = $Create.Array($Create.Any);
+const $$createType1 = SyncCopyAction.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = SyncDeleteAction.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = SyncItemError.createFrom;
+const $$createType6 = $Create.Array($$createType5);

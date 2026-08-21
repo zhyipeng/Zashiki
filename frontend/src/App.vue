@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import {computed, ref, onMounted, onUnmounted, watch} from 'vue'
-import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider, NButton, NIcon, darkTheme} from 'naive-ui'
+import {NSplit, NMessageProvider, NSpin, NConfigProvider, NDivider, NButton, NIcon, NTooltip, darkTheme} from 'naive-ui'
 import Sidebar from './components/Sidebar.vue'
 import SplitNode from './components/SplitNode.vue'
 import {createLeaf, splitLeaf, closeLeaf, keepOnlyLeaf, navigateLeaf, getFirstLeafId, getLeafIds, findLeafById} from './components/tree'
 import type {TreeNode} from './components/tree'
 import {FileService} from '../bindings/zashiki/internal/filemanager'
-import { Settings28Regular } from '@vicons/fluent'
+import { Settings28Regular, Folder28Regular, ArrowSync24Regular } from '@vicons/fluent'
 import SettingsModal from './components/SettingsModal.vue'
 import OperationProgressbar from './components/OperationProgressbar.vue'
+import SyncToolPage from './components/sync/SyncToolPage.vue'
 import { useTheme } from './composables/useTheme'
 import { useFileClipboard } from './composables/useFileClipboard'
 import { bindOperationProgressEvents } from './composables/useOperationProgress'
 
 const showSettings = ref(false)
+const activeView = ref<'files' | 'sync'>('files')
 const { isDarkTheme, mountTheme } = useTheme()
 const fileClipboard = useFileClipboard()
 const naiveTheme = computed(() => isDarkTheme.value ? darkTheme : null)
@@ -178,6 +180,7 @@ function handleSelectionStatus(leafId: number, status: SelectionStatus) {
 
 function onGlobalKeydown(event: KeyboardEvent) {
   if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey) return
+  if (activeView.value !== 'files') return
   if (isEditableTarget(event.target)) return
   event.preventDefault()
   if (event.shiftKey) {
@@ -225,12 +228,41 @@ function basename(path: string): string {
               {{ item }}
             </span>
           </div>
-          <n-button text style="font-size: 24px" @click="showSettings = true">
-            <n-icon><Settings28Regular/></n-icon>
-          </n-button>
+          <div class="app-view-switch">
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  text
+                  class="view-switch-button"
+                  :class="{ active: activeView === 'files' }"
+                  @click="activeView = 'files'"
+                >
+                  <n-icon :size="22"><Folder28Regular /></n-icon>
+                </n-button>
+              </template>
+              文件管理
+            </n-tooltip>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  text
+                  class="view-switch-button"
+                  :class="{ active: activeView === 'sync' }"
+                  @click="activeView = 'sync'"
+                >
+                  <n-icon :size="22"><ArrowSync24Regular /></n-icon>
+                </n-button>
+              </template>
+              同步工具
+            </n-tooltip>
+            <n-button text style="font-size: 24px" @click="showSettings = true">
+              <n-icon><Settings28Regular/></n-icon>
+            </n-button>
+          </div>
         </div>
         <NDivider style="margin: 0" />
         <NSplit
+            v-show="activeView === 'files'"
             class="app-main-split"
             direction="horizontal"
             :default-size="'180px'"
@@ -271,6 +303,9 @@ function basename(path: string): string {
             </div>
           </template>
         </NSplit>
+        <div v-show="activeView === 'sync'" class="app-sync-view">
+          <SyncToolPage />
+        </div>
         <OperationProgressbar />
         <SettingsModal v-model:show="showSettings" />
       </div>
@@ -335,6 +370,31 @@ html, body, #app {
   justify-content: flex-end;
   gap: 12px;
   box-sizing: border-box;
+}
+
+.app-view-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.view-switch-button {
+  font-size: 22px;
+  color: var(--n-text-color-3);
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.view-switch-button.active {
+  color: var(--n-primary-color);
+  background: var(--n-color-hover);
+}
+
+.app-sync-view {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .app-status-bar {

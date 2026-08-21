@@ -9,21 +9,31 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+/**
+ * AnalyzeSync compares source and target trees and returns the actions a
+ * subsequent ExecuteSync would perform, without touching the filesystem.
+ */
+export function AnalyzeSync(config: $models.SyncConfig): $CancellablePromise<$models.SyncPlan | null> {
+    return $Call.ByID(2493484506, config).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
 export function CheckConflicts(paths: string[], destDir: string): $CancellablePromise<string[]> {
     return $Call.ByID(1244242588, paths, destDir).then(($result: any) => {
-        return $$createType0($result);
+        return $$createType2($result);
     });
 }
 
 export function CopyEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<$models.EntryOperationResult[]> {
     return $Call.ByID(2898335274, paths, destDir, conflict).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType4($result);
     });
 }
 
 export function CopyEntriesToTargets(pairs: $models.EntryPathPair[]): $CancellablePromise<$models.EntryOperationResult[]> {
     return $Call.ByID(2618535411, pairs).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType4($result);
     });
 }
 
@@ -41,19 +51,31 @@ export function DeleteEmptyFolder(path: string): $CancellablePromise<string> {
 
 export function DeleteEntries(paths: string[]): $CancellablePromise<string[]> {
     return $Call.ByID(1689627624, paths).then(($result: any) => {
-        return $$createType0($result);
+        return $$createType2($result);
+    });
+}
+
+/**
+ * ExecuteSync performs the synchronization described by config. It re-analyzes
+ * the trees first so stale previews never cause unintended deletions. Items
+ * failing mid-run are collected into SyncResult.Errors without aborting the
+ * rest; only an invalid configuration or an unreachable source aborts early.
+ */
+export function ExecuteSync(config: $models.SyncConfig): $CancellablePromise<$models.SyncResult | null> {
+    return $Call.ByID(1981589677, config).then(($result: any) => {
+        return $$createType6($result);
     });
 }
 
 export function GetFileInfo(path: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(1693135863, path).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType7($result);
     });
 }
 
 export function GetFilePreview(path: string): $CancellablePromise<$models.FilePreview> {
     return $Call.ByID(4209707701, path).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType8($result);
     });
 }
 
@@ -63,7 +85,7 @@ export function GetHomeDir(): $CancellablePromise<string> {
 
 export function GetRoots(): $CancellablePromise<$models.RootEntry[]> {
     return $Call.ByID(578700098).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType10($result);
     });
 }
 
@@ -73,7 +95,7 @@ export function GetSeparator(): $CancellablePromise<string> {
 
 export function GetTrashInfo(): $CancellablePromise<$models.TrashInfo> {
     return $Call.ByID(3126279077).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType11($result);
     });
 }
 
@@ -83,19 +105,19 @@ export function IsSameDrive(path1: string, path2: string): $CancellablePromise<b
 
 export function ListDir(path: string): $CancellablePromise<$models.FileEntry[]> {
     return $Call.ByID(461256242, path).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType12($result);
     });
 }
 
 export function MoveEntries(paths: string[], destDir: string, conflict: string): $CancellablePromise<$models.EntryOperationResult[]> {
     return $Call.ByID(1201006282, paths, destDir, conflict).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType4($result);
     });
 }
 
 export function MoveEntriesToTargets(pairs: $models.EntryPathPair[]): $CancellablePromise<$models.EntryOperationResult[]> {
     return $Call.ByID(1863354771, pairs).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType4($result);
     });
 }
 
@@ -121,29 +143,33 @@ export function OpenWithEditor(path: string, editorProgram: string): $Cancellabl
 
 export function RenameEntry(path: string, name: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(1533604623, path, name).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType7($result);
     });
 }
 
 export function SaveTextPreview(path: string, content: string, expectedVersion: string): $CancellablePromise<$models.FilePreview> {
     return $Call.ByID(840243591, path, content, expectedVersion).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType8($result);
     });
 }
 
 export function TrashEntries(paths: string[]): $CancellablePromise<$models.EntryOperationResult[]> {
     return $Call.ByID(238716349, paths).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType4($result);
     });
 }
 
 // Private type creation functions
-const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = $models.EntryOperationResult.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = $models.FileEntry.createFrom;
-const $$createType4 = $models.FilePreview.createFrom;
-const $$createType5 = $models.RootEntry.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = $models.TrashInfo.createFrom;
-const $$createType8 = $Create.Array($$createType3);
+const $$createType0 = $models.SyncPlan.createFrom;
+const $$createType1 = $Create.Nullable($$createType0);
+const $$createType2 = $Create.Array($Create.Any);
+const $$createType3 = $models.EntryOperationResult.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = $models.SyncResult.createFrom;
+const $$createType6 = $Create.Nullable($$createType5);
+const $$createType7 = $models.FileEntry.createFrom;
+const $$createType8 = $models.FilePreview.createFrom;
+const $$createType9 = $models.RootEntry.createFrom;
+const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = $models.TrashInfo.createFrom;
+const $$createType12 = $Create.Array($$createType7);

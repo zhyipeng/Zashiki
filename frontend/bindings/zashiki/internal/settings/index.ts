@@ -7,5 +7,6 @@ export {
 };
 
 export {
-    Settings
+    Settings,
+    SyncToolSettings
 } from "./models.js";

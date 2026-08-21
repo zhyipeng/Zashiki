@@ -30,6 +30,18 @@ func TestSettingsService_GetSettings_Default(t *testing.T) {
 	if len(settings.PinnedQuickAccessPaths) != 0 {
 		t.Errorf("expected PinnedQuickAccessPaths to default to empty, got %v", settings.PinnedQuickAccessPaths)
 	}
+	if settings.SyncTool.Mode != "incremental" {
+		t.Errorf("expected SyncTool.Mode=incremental by default, got %q", settings.SyncTool.Mode)
+	}
+	if !settings.SyncTool.CompareSize || !settings.SyncTool.CompareModTime {
+		t.Errorf("expected SyncTool size+modTime comparison by default, got %+v", settings.SyncTool)
+	}
+	if !settings.SyncTool.IgnoreHidden {
+		t.Error("expected SyncTool.IgnoreHidden=true by default")
+	}
+	if settings.SyncTool.CompareHash {
+		t.Error("expected SyncTool.CompareHash=false by default")
+	}
 }
 
 func TestSettingsService_SaveAndGet(t *testing.T) {
@@ -63,6 +75,91 @@ func TestSettingsService_SaveAndGet(t *testing.T) {
 	}
 	if len(loaded.PinnedQuickAccessPaths) != 2 || loaded.PinnedQuickAccessPaths[0] != "/tmp/project" || loaded.PinnedQuickAccessPaths[1] != "/tmp/archive" {
 		t.Errorf("expected pinned quick access paths to round trip, got %v", loaded.PinnedQuickAccessPaths)
+	}
+}
+
+func TestSettingsService_SaveAndGetSyncTool(t *testing.T) {
+	svc := newTestService(t)
+	original := Settings{
+		SyncTool: SyncToolSettings{
+			SourceDir:      "/tmp/source",
+			TargetDir:      "/tmp/target",
+			Mode:           "mirror",
+			CompareHash:    true,
+			IgnoreHidden:   false,
+			IgnorePatterns: []string{"node_modules", "*.tmp"},
+		},
+	}
+	if err := svc.SaveSettings(original); err != nil {
+		t.Fatalf("SaveSettings() failed: %v", err)
+	}
+
+	loaded, err := svc.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings() failed: %v", err)
+	}
+	syncTool := loaded.SyncTool
+	if syncTool.SourceDir != "/tmp/source" || syncTool.TargetDir != "/tmp/target" {
+		t.Errorf("expected sync dirs to round trip, got %+v", syncTool)
+	}
+	if syncTool.Mode != "mirror" {
+		t.Errorf("expected Mode=mirror, got %q", syncTool.Mode)
+	}
+	if syncTool.CompareSize || syncTool.CompareModTime || !syncTool.CompareHash {
+		t.Errorf("expected only hash comparison, got %+v", syncTool)
+	}
+	if syncTool.IgnoreHidden {
+		t.Error("expected IgnoreHidden=false to round trip")
+	}
+	if len(syncTool.IgnorePatterns) != 2 || syncTool.IgnorePatterns[0] != "node_modules" || syncTool.IgnorePatterns[1] != "*.tmp" {
+		t.Errorf("expected ignore patterns to round trip, got %v", syncTool.IgnorePatterns)
+	}
+}
+
+func TestSettingsService_LegacyConfigWithoutSyncTool(t *testing.T) {
+	svc := newTestService(t)
+	path, err := svc.configPath()
+	if err != nil {
+		t.Fatalf("configPath() failed: %v", err)
+	}
+	// A config written before the sync tool existed.
+	if err := os.WriteFile(path, []byte(`{"showHiddenFiles":true,"themeMode":"dark"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	settings, err := svc.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings() failed: %v", err)
+	}
+	if !settings.ShowHiddenFiles || settings.ThemeMode != "dark" {
+		t.Errorf("expected legacy fields preserved, got %+v", settings)
+	}
+	if settings.SyncTool.Mode != "incremental" || !settings.SyncTool.CompareSize {
+		t.Errorf("expected sync defaults for legacy config, got %+v", settings.SyncTool)
+	}
+}
+
+func TestSettingsService_InvalidSyncToolNormalized(t *testing.T) {
+	svc := newTestService(t)
+	path, err := svc.configPath()
+	if err != nil {
+		t.Fatalf("configPath() failed: %v", err)
+	}
+	config := `{"syncTool":{"mode":"bogus","compareSize":false,"compareModTime":false,"compareHash":false}}`
+	if err := os.WriteFile(path, []byte(config), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	settings, err := svc.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings() failed: %v", err)
+	}
+	syncTool := settings.SyncTool
+	if syncTool.Mode != "incremental" {
+		t.Errorf("expected invalid mode normalized to incremental, got %q", syncTool.Mode)
+	}
+	if !syncTool.CompareSize {
+		t.Error("expected CompareSize re-enabled when no dimension is configured")
 	}
 }
 

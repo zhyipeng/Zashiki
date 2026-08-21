@@ -21,6 +21,7 @@ const (
 	OperationKindMove   OperationKind = "move"
 	OperationKindDelete OperationKind = "delete"
 	OperationKindTrash  OperationKind = "trash"
+	OperationKindSync   OperationKind = "sync"
 )
 
 type OperationProgressPhase string

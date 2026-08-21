@@ -11,6 +11,7 @@ export class Settings {
     "terminalProgram": string;
     "defaultEditor": string;
     "pinnedQuickAccessPaths": string[];
+    "syncTool": SyncToolSettings;
 
     /** Creates a new Settings instance. */
     constructor($$source: Partial<Settings> = {}) {
@@ -29,6 +30,9 @@ export class Settings {
         if (!("pinnedQuickAccessPaths" in $$source)) {
             this["pinnedQuickAccessPaths"] = [];
         }
+        if (!("syncTool" in $$source)) {
+            this["syncTool"] = (new SyncToolSettings());
+        }
 
         Object.assign(this, $$source);
     }
@@ -38,13 +42,71 @@ export class Settings {
      */
     static createFrom($$source: any = {}): Settings {
         const $$createField4_0 = $$createType0;
+        const $$createField5_0 = $$createType1;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("pinnedQuickAccessPaths" in $$parsedSource) {
             $$parsedSource["pinnedQuickAccessPaths"] = $$createField4_0($$parsedSource["pinnedQuickAccessPaths"]);
+        }
+        if ("syncTool" in $$parsedSource) {
+            $$parsedSource["syncTool"] = $$createField5_0($$parsedSource["syncTool"]);
         }
         return new Settings($$parsedSource as Partial<Settings>);
     }
 }
 
+export class SyncToolSettings {
+    "sourceDir": string;
+    "targetDir": string;
+    "mode": string;
+    "compareSize": boolean;
+    "compareModTime": boolean;
+    "compareHash": boolean;
+    "ignoreHidden": boolean;
+    "ignorePatterns": string[];
+
+    /** Creates a new SyncToolSettings instance. */
+    constructor($$source: Partial<SyncToolSettings> = {}) {
+        if (!("sourceDir" in $$source)) {
+            this["sourceDir"] = "";
+        }
+        if (!("targetDir" in $$source)) {
+            this["targetDir"] = "";
+        }
+        if (!("mode" in $$source)) {
+            this["mode"] = "";
+        }
+        if (!("compareSize" in $$source)) {
+            this["compareSize"] = false;
+        }
+        if (!("compareModTime" in $$source)) {
+            this["compareModTime"] = false;
+        }
+        if (!("compareHash" in $$source)) {
+            this["compareHash"] = false;
+        }
+        if (!("ignoreHidden" in $$source)) {
+            this["ignoreHidden"] = false;
+        }
+        if (!("ignorePatterns" in $$source)) {
+            this["ignorePatterns"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SyncToolSettings instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SyncToolSettings {
+        const $$createField7_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("ignorePatterns" in $$parsedSource) {
+            $$parsedSource["ignorePatterns"] = $$createField7_0($$parsedSource["ignorePatterns"]);
+        }
+        return new SyncToolSettings($$parsedSource as Partial<SyncToolSettings>);
+    }
+}
+
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
+const $$createType1 = SyncToolSettings.createFrom;

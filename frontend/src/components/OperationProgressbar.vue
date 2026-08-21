@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NButton, NIcon, NProgress } from 'naive-ui'
-import { CloseRound, ContentCopyOutlined, DriveFileMoveOutlined, DeleteOutlineRound, DeleteSweepOutlined } from '@vicons/material'
+import { CloseRound, ContentCopyOutlined, DriveFileMoveOutlined, DeleteOutlineRound, DeleteSweepOutlined, SyncOutlined } from '@vicons/material'
 import {
   isTerminalPhase,
   operationLabel,
@@ -18,6 +18,7 @@ const kindIcons = {
   move: DriveFileMoveOutlined,
   delete: DeleteOutlineRound,
   trash: DeleteSweepOutlined,
+  sync: SyncOutlined,
 } as const
 
 function iconFor(state: OperationProgressState) {

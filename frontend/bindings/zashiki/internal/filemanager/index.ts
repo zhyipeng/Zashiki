@@ -15,5 +15,11 @@ export {
     OperationProgress,
     OperationProgressPhase,
     RootEntry,
+    SyncConfig,
+    SyncCopyAction,
+    SyncDeleteAction,
+    SyncItemError,
+    SyncPlan,
+    SyncResult,
     TrashInfo
 } from "./models.js";

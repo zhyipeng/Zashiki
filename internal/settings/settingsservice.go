@@ -9,12 +9,24 @@ import (
 	"github.com/adrg/xdg"
 )
 
+type SyncToolSettings struct {
+	SourceDir      string   `json:"sourceDir"`
+	TargetDir      string   `json:"targetDir"`
+	Mode           string   `json:"mode"`
+	CompareSize    bool     `json:"compareSize"`
+	CompareModTime bool     `json:"compareModTime"`
+	CompareHash    bool     `json:"compareHash"`
+	IgnoreHidden   bool     `json:"ignoreHidden"`
+	IgnorePatterns []string `json:"ignorePatterns"`
+}
+
 type Settings struct {
-	ShowHiddenFiles        bool     `json:"showHiddenFiles"`
-	ThemeMode              string   `json:"themeMode"`
-	TerminalProgram        string   `json:"terminalProgram"`
-	DefaultEditor          string   `json:"defaultEditor"`
-	PinnedQuickAccessPaths []string `json:"pinnedQuickAccessPaths"`
+	ShowHiddenFiles        bool             `json:"showHiddenFiles"`
+	ThemeMode              string           `json:"themeMode"`
+	TerminalProgram        string           `json:"terminalProgram"`
+	DefaultEditor          string           `json:"defaultEditor"`
+	PinnedQuickAccessPaths []string         `json:"pinnedQuickAccessPaths"`
+	SyncTool               SyncToolSettings `json:"syncTool"`
 }
 
 type SettingsService struct {
@@ -69,6 +81,7 @@ func (s *SettingsService) GetSettings() (Settings, error) {
 	if !isValidThemeMode(settings.ThemeMode) {
 		settings.ThemeMode = defaultSettings().ThemeMode
 	}
+	settings.SyncTool = normalizeSyncToolSettings(settings.SyncTool)
 	return settings, nil
 }
 
@@ -90,9 +103,33 @@ func (s *SettingsService) SaveSettings(settings Settings) error {
 }
 
 func defaultSettings() Settings {
-	return Settings{ThemeMode: "system"}
+	return Settings{
+		ThemeMode: "system",
+		SyncTool: SyncToolSettings{
+			Mode:           "incremental",
+			CompareSize:    true,
+			CompareModTime: true,
+			IgnoreHidden:   true,
+		},
+	}
 }
 
 func isValidThemeMode(mode string) bool {
 	return mode == "light" || mode == "dark" || mode == "system"
+}
+
+// normalizeSyncToolSettings repairs stored sync tool values so the frontend
+// always receives a usable configuration: mode falls back to incremental and
+// a config without any comparison dimension re-enables the size default.
+func normalizeSyncToolSettings(syncTool SyncToolSettings) SyncToolSettings {
+	if syncTool.Mode != "mirror" && syncTool.Mode != "incremental" {
+		syncTool.Mode = "incremental"
+	}
+	if !syncTool.CompareSize && !syncTool.CompareModTime && !syncTool.CompareHash {
+		syncTool.CompareSize = true
+	}
+	if syncTool.IgnorePatterns == nil {
+		syncTool.IgnorePatterns = []string{}
+	}
+	return syncTool
 }
