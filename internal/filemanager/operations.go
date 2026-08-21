@@ -515,6 +515,29 @@ func copyEntry(ctx context.Context, src, dst string, created *cancellationCleane
 
 const copyBufferSize = 256 * 1024
 
+// cancelCheckWriter wraps the destination file so each Write first checks ctx
+// cancellation and reports the copied byte count to the progress counter. It is
+// used with io.CopyBuffer to keep cancellation and byte-accounting semantics
+// identical to the previous read/write loop while delegating chunking to io.CopyBuffer.
+type cancelCheckWriter struct {
+	ctx     context.Context
+	counter byteCounter
+	dst     io.Writer
+}
+
+// Write reports copied bytes to the counter and returns a context error as soon
+// as the caller's context is cancelled, preserving cancellable copy semantics.
+func (w *cancelCheckWriter) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := w.dst.Write(p)
+	if n > 0 {
+		w.counter.bytesCopied(int64(n))
+	}
+	return n, err
+}
+
 func copyFile(ctx context.Context, src, dst string, created *cancellationCleaner, counter byteCounter) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -546,27 +569,14 @@ func copyFile(ctx context.Context, src, dst string, created *cancellationCleaner
 		created.track(dst)
 	}
 
+	// io.CopyBuffer reads from srcF and writes through cancelCheckWriter, which
+	// checks ctx cancellation before each write and accumulates real copied bytes
+	// into the counter. Partial writes are handled internally; io.EOF ends the loop.
 	buf := make([]byte, copyBufferSize)
-	for {
-		if err := ctx.Err(); err != nil {
-			dstF.Close()
-			return err
-		}
-		n, readErr := srcF.Read(buf)
-		if n > 0 {
-			if _, writeErr := dstF.Write(buf[:n]); writeErr != nil {
-				dstF.Close()
-				return writeErr
-			}
-			counter.bytesCopied(int64(n))
-		}
-		if readErr == io.EOF {
-			break
-		}
-		if readErr != nil {
-			dstF.Close()
-			return readErr
-		}
+	_, copyErr := io.CopyBuffer(&cancelCheckWriter{ctx: ctx, counter: counter, dst: dstF}, srcF, buf)
+	if copyErr != nil {
+		dstF.Close()
+		return copyErr
 	}
 	return dstF.Close()
 }
