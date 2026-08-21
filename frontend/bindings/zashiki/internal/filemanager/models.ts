@@ -9,6 +9,39 @@ import { Create as $Create } from "@wailsio/runtime";
 // @ts-ignore: Unused imports
 import * as time$0 from "../../../time/models.js";
 
+/**
+ * DirPage 是 ListDirPage 的分页返回模型：entries 为单个分页切片，
+ * total 为目录条目总数（分页期间条目消失仍计入，与 ListDir 的 continue 语义一致）。
+ */
+export class DirPage {
+    "entries": FileEntry[];
+    "total": number;
+
+    /** Creates a new DirPage instance. */
+    constructor($$source: Partial<DirPage> = {}) {
+        if (!("entries" in $$source)) {
+            this["entries"] = [];
+        }
+        if (!("total" in $$source)) {
+            this["total"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DirPage instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DirPage {
+        const $$createField0_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("entries" in $$parsedSource) {
+            $$parsedSource["entries"] = $$createField0_0($$parsedSource["entries"]);
+        }
+        return new DirPage($$parsedSource as Partial<DirPage>);
+    }
+}
+
 export class EntryOperationResult {
     "sourcePath": string;
     "targetPath": string;
@@ -362,7 +395,7 @@ export class SyncConfig {
      * Creates a new SyncConfig instance from a string or object.
      */
     static createFrom($$source: any = {}): SyncConfig {
-        const $$createField7_0 = $$createType0;
+        const $$createField7_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("ignorePatterns" in $$parsedSource) {
             $$parsedSource["ignorePatterns"] = $$createField7_0($$parsedSource["ignorePatterns"]);
@@ -486,9 +519,9 @@ export class SyncPlan {
      * Creates a new SyncPlan instance from a string or object.
      */
     static createFrom($$source: any = {}): SyncPlan {
-        const $$createField0_0 = $$createType2;
-        const $$createField1_0 = $$createType4;
-        const $$createField3_0 = $$createType6;
+        const $$createField0_0 = $$createType4;
+        const $$createField1_0 = $$createType6;
+        const $$createField3_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("copy" in $$parsedSource) {
             $$parsedSource["copy"] = $$createField0_0($$parsedSource["copy"]);
@@ -542,7 +575,7 @@ export class SyncResult {
      * Creates a new SyncResult instance from a string or object.
      */
     static createFrom($$source: any = {}): SyncResult {
-        const $$createField5_0 = $$createType6;
+        const $$createField5_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("errors" in $$parsedSource) {
             $$parsedSource["errors"] = $$createField5_0($$parsedSource["errors"]);
@@ -581,10 +614,12 @@ export class TrashInfo {
 }
 
 // Private type creation functions
-const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = SyncCopyAction.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = SyncDeleteAction.createFrom;
+const $$createType0 = FileEntry.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $Create.Array($Create.Any);
+const $$createType3 = SyncCopyAction.createFrom;
 const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = SyncItemError.createFrom;
+const $$createType5 = SyncDeleteAction.createFrom;
 const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = SyncItemError.createFrom;
+const $$createType8 = $Create.Array($$createType7);

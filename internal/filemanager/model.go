@@ -2,6 +2,13 @@ package filemanager
 
 import "time"
 
+// DirPage 是 ListDirPage 的分页返回模型：entries 为单个分页切片，
+// total 为目录条目总数（分页期间条目消失仍计入，与 ListDir 的 continue 语义一致）。
+type DirPage struct {
+	Entries []FileEntry `json:"entries"`
+	Total   int         `json:"total"`
+}
+
 type FileEntry struct {
 	Name         string    `json:"name"`
 	Path         string    `json:"path"`

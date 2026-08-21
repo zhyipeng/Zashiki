@@ -4,9 +4,15 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 )
 
-type FileService struct{}
+// FileService 是文件系统服务入口。mu/cacheOrder 供 ListDirPage 的分页枚举缓存使用。
+type FileService struct {
+	mu         sync.Mutex
+	dirCache   map[string]*dirCacheEntry
+	cacheOrder []string // LRU 序，最近使用在末尾
+}
 
 func (f *FileService) ListDir(path string) ([]FileEntry, error) {
 	entries, err := os.ReadDir(path)

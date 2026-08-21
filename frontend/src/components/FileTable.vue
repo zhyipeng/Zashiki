@@ -32,6 +32,7 @@ import {
 } from './findMode'
 import type { FindModeTarget } from './findMode'
 import { pageEntryOffset, navigationMouseAction } from './fileTableNavigation'
+import { nextPageRange, shouldContinueFetch } from './dirPaging'
 import { joinPath, parentPath as getParentPath } from './path'
 
 const { settings } = useSettings()
@@ -67,30 +68,59 @@ const props = defineProps<{
 }>()
 const operationHistory = useFileOperationHistory(() => props.separator)
 
+// 首屏分页大小：后台以 PAGE_SIZE 为粒度逐个补齐。
+const PAGE_SIZE = 500
+// 每次 loadDir/refresh 递增，旧的后台补齐循环检测到代际变化自动终止。
+let loadGeneration = 0
+
 function loadDir(p: string) {
   loading.value = true
   errorMsg.value = ''
   pathError.value = false
   entries.value = []
-  FileService.ListDir(p).then((result) => {
-    entries.value = result || []
-    // After entries are loaded, validate the remembered cursor
-    // If the remembered entry no longer exists, clear it
-    if (currentRowKey.value) {
-      const exists = entries.value.some(entry => entry.path === currentRowKey.value)
-      if (!exists) {
-        currentRowKey.value = ''
-        selectedRowKeys.value = []
-        cursorMemory.delete(p)
+  hasMore.value = false
+  const gen = ++loadGeneration
+  FileService.ListDirPage(p, 0, PAGE_SIZE)
+    .then((page) => {
+      if (gen !== loadGeneration) return
+      entries.value = page.entries || []
+      // After entries are loaded, validate the remembered cursor
+      // If the remembered entry no longer exists, clear it
+      if (currentRowKey.value) {
+        const exists = entries.value.some(entry => entry.path === currentRowKey.value)
+        if (!exists) {
+          currentRowKey.value = ''
+          selectedRowKeys.value = []
+          cursorMemory.delete(p)
+        }
       }
-    }
-  }).catch((err) => {
-    console.error('ListDir failed:', p, err)
-    errorMsg.value = friendlyError(err, p)
-    pathError.value = true
-  }).finally(() => {
-    loading.value = false
-  })
+      hasMore.value = shouldContinueFetch(entries.value.length, page.total)
+      // 首屏立即解锁，其余条目后台补齐（不 await，避免阻塞渲染）。
+      if (hasMore.value) {
+        fillRemaining(p, gen, entries.value.length, page.total)
+      }
+    })
+    .catch((err) => {
+      if (gen !== loadGeneration) return
+      console.error('ListDir failed:', p, err)
+      errorMsg.value = friendlyError(err, p)
+      pathError.value = true
+    })
+    .finally(() => {
+      if (gen === loadGeneration) loading.value = false
+    })
+}
+
+async function fillRemaining(p: string, gen: number, from: number, total: number) {
+  for (let offset = from; offset < total;) {
+    if (gen !== loadGeneration) return // 路径切换竞态保护
+    const page = await FileService.ListDirPage(p, offset, PAGE_SIZE)
+    if (gen !== loadGeneration) return
+    const appended = page.entries || []
+    entries.value = entries.value.concat(appended) // concat 生成新数组，规避 inline cache 抖动
+    offset = nextPageRange(entries.value.length, total, PAGE_SIZE)?.offset ?? total
+  }
+  if (gen === loadGeneration) hasMore.value = false
 }
 
 function refresh() {
@@ -144,6 +174,8 @@ const emit = defineEmits<{
 
 const entries = ref<FileEntry[]>([])
 const loading = ref(false)
+// 分页补齐中：首屏已展示，后台仍在追加条目。
+const hasMore = ref(false)
 const errorMsg = ref('')
 const pathError = ref(false)
 const multiSelectMode = ref(false)
@@ -1821,6 +1853,9 @@ useKeyboardShortcuts(() => shortcutActions, {
             <n-icon><ChecklistOutlined/></n-icon>
           </template>
         </NButton>
+        <NSpin v-if="hasMore" size="small" title="正在加载更多条目">
+          <span class="hasmore-label">正在补齐…</span>
+        </NSpin>
       </div>
       <div class="toolbar-right">
         <NButton
@@ -2094,6 +2129,13 @@ useKeyboardShortcuts(() => shortcutActions, {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.hasmore-label {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  white-space: nowrap;
 }
 
 .path-input {

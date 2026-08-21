@@ -7,6 +7,7 @@ export {
 };
 
 export {
+    DirPage,
     EntryOperationResult,
     EntryPathPair,
     FileEntry,
