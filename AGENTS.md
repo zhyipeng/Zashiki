@@ -28,7 +28,7 @@
 ## 项目结构
 
 ```
-file-explorer/
+zashiki/
 ├── main.go                  # 应用入口，窗口创建，事件注册
 ├── fileservice.go           # 文件系统 Service（ListDir / GetFileInfo / GetHomeDir / GetSeparator）
 ├── go.mod / go.sum          # Go 模块定义

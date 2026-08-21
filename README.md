@@ -1,4 +1,4 @@
-# File Explorer
+# Zashiki
 
 跨平台文件资源管理器，基于 Wails v3 + Vue 3 + TypeScript 构建。
 
@@ -38,7 +38,7 @@ go test ./...
 ## 项目结构
 
 ```
-file-explorer/
+zashiki/
 ├── main.go              # 应用入口，窗口与服务注册
 ├── Taskfile.yml         # task 编排 (dev/build/run)
 ├── build/               # 各平台构建配置
