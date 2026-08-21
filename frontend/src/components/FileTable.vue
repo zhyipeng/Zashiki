@@ -73,7 +73,6 @@ function loadDir(p: string) {
   pathError.value = false
   entries.value = []
   FileService.ListDir(p).then((result) => {
-    console.log('ListDir', p, '→', result?.length, 'entries')
     entries.value = result || []
     // After entries are loaded, validate the remembered cursor
     // If the remembered entry no longer exists, clear it
