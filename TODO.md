@@ -25,7 +25,11 @@
 ### p2 - 没那么重要的
   - [ ] 自定义快捷键
   - [ ] 更多主题
-  - [ ] 和系统文件资源管理器交互
+  - [x] 和系统文件资源管理器交互
+    - [x] 系统文件拖入（WindowFilesDropped + data-file-drop-target）
+    - [x] Ctrl+C/X → 系统剪贴板（darwin/windows/linux）
+    - [x] 从系统剪贴板粘贴（含 Finder 复制到 Zashiki）
+    - [ ] 原生拖出（第 4 步，WebView→AppKit/Shell 桥接）
 
 ### p3 - 暂时没想到解决方案
   - [x] FileTable 空白区域

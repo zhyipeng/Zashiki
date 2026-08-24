@@ -7,6 +7,8 @@ import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { useSettings } from '../composables/useSettings'
 import { FILE_EXPLORER_DRAG_MIME, activeDragPaths, clearDrag, finishDragDrop, hasActiveDragPayload, startFileExplorerDrag } from '../composables/useDragDrop'
 import { useDirectoryChangeListener } from '../composables/useDirectoryEvents'
+import { openSystemDropConfirm, setSidebarSystemDropHandler } from '../composables/useSystemFileDrop'
+import type { SystemDropEvent } from '../composables/useSystemFileDrop'
 import { ancestorPaths, baseName, joinPath, pathRoot } from './path'
 
 type RootInfo = { name: string, path: string, freeSpace: number, totalSpace: number }
@@ -50,11 +52,13 @@ const rootByPath = computed(() => new Map(props.roots.map(root => [root.path, ro
 onMounted(() => {
   window.addEventListener('dragover', onWindowDragOver)
   window.addEventListener('dragend', onWindowDragEnd)
+  bindSystemDropListener()
 })
 
 onUnmounted(() => {
   window.removeEventListener('dragover', onWindowDragOver)
   window.removeEventListener('dragend', onWindowDragEnd)
+  unbindSystemDropListener()
 })
 
 watch(() => [props.homeDir, props.separator, props.roots] as const, ([home, separator, roots]) => {
@@ -181,6 +185,8 @@ function treeNodeProps({ option }: { option: TreeOption }) {
   const path = typeof option.key === 'string' ? option.key : String(option.key)
   return {
     draggable: true,
+    'data-file-drop-target': true,
+    'data-drop-dir': path,
     onDragstart: (e: DragEvent) => startFileExplorerDrag(e, [path], path),
     onDragend: () => clearDrag(),
   }
@@ -258,7 +264,30 @@ async function onQuickAccessDrop(e: DragEvent) {
     return
   }
 
+  // 系统文件拖入（非内部拖拽）：走确认框决定复制/移动到悬停的快速访问目录
+  if (!hasActiveDragPayload()) {
+    const targetDir = quickAccessItemPathAtPoint(e.clientX, e.clientY)
+    if (targetDir) {
+      openSystemDropConfirm(paths, targetDir)
+      return
+    }
+  }
+
   await pinQuickAccessPaths(paths)
+}
+
+function quickAccessItemPathAtPoint(x: number, y: number): string {
+  const el = quickAccessRef.value
+  if (!el) return ''
+  const items = Array.from(el.querySelectorAll('.quick-item'))
+  for (const item of items) {
+    const rect = item.getBoundingClientRect()
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      const path = item.getAttribute('data-quick-path')
+      if (path) return path
+    }
+  }
+  return ''
 }
 
 async function onWindowDragEnd() {
@@ -275,6 +304,37 @@ async function onWindowDragEnd() {
 function onWindowDragOver(e: DragEvent) {
   if (!hasActiveDragPayload()) return
   rememberDragPoint(e)
+}
+
+// ---- 系统文件拖入（Finder/Explorer → 侧边栏目录） ----
+// 全局只绑定一次 WindowFilesDropped（见 useSystemFileDrop），侧边栏在这里
+// 注册自己的落点处理：树节点/快速访问的系统文件拖入 → 走确认框决定复制/移动。
+
+function bindSystemDropListener() {
+  setSidebarSystemDropHandler((event: SystemDropEvent) => {
+    void handleSystemDrop(event)
+  })
+}
+
+function unbindSystemDropListener() {
+  setSidebarSystemDropHandler(null)
+}
+
+async function handleSystemDrop(event: SystemDropEvent) {
+  const files = event?.files || []
+  if (files.length === 0) return
+  const dir = systemDropTargetDir(event.details)
+  if (!dir) return
+  openSystemDropConfirm(files, dir)
+}
+
+/** 从落点元素 attributes 解析目标目录（树节点 data-drop-dir）。 */
+function systemDropTargetDir(details: SystemDropEvent['details']): string {
+  const attrs = details?.attributes
+  if (!attrs) return ''
+  const dir = attrs['data-drop-dir']
+  if (!dir || dir === '__quick_access__') return ''
+  return dir
 }
 
 function isLastDragPointInQuickAccess(): boolean {
@@ -387,6 +447,8 @@ function persistPinnedQuickAccess(paths: string[]) {
           ref="quickAccessRef"
           class="quick-access"
           :class="{ 'drag-over': quickAccessDragOver }"
+          data-file-drop-target
+          data-drop-dir="__quick_access__"
           @dragover="onQuickAccessDragOver"
           @dragenter="onQuickAccessDragEnter"
           @dragleave="onQuickAccessDragLeave"
@@ -398,6 +460,7 @@ function persistPinnedQuickAccess(paths: string[]) {
             :key="item.isTrash ? 'trash' : item.path"
             class="quick-item"
             :class="{ active: item.path && currentPath === item.path, pinned: item.isPinned }"
+            :data-quick-path="item.path || undefined"
             @click="onQuickAccessClick(item)"
             @contextmenu.stop="showQuickAccessContextMenu($event, item)"
           >

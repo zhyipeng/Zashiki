@@ -10,12 +10,15 @@ import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NAuto
 import type { AutoCompleteInst, AutoCompleteOption, DataTableColumns, DataTableInst, DataTableSortState, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
+import { FileTransferService, ClipboardOperation } from '../../bindings/zashiki/internal/nativefs'
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
 import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined, SearchOutlined, UndoSharp, RedoSharp } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
 import { useDragDrop, clearDrag } from '../composables/useDragDrop'
+import { useSystemFileDrop } from '../composables/useSystemFileDrop'
 import { useFileClipboard } from '../composables/useFileClipboard'
+import type { ClipboardMode } from '../composables/clipboardState'
 import { formatShortcutBinding, useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
 import { notifyDirectoriesChanged, useDirectoryEvents } from '../composables/useDirectoryEvents'
@@ -43,11 +46,7 @@ const fileTableRef = ref<HTMLElement | null>(null)
 const tableAreaRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<DataTableInst | null>(null)
 const fileClipboard = useFileClipboard()
-const cutPathSet = computed(() => {
-  const clipboard = fileClipboard.clipboard.value
-  if (!clipboard || clipboard.mode !== 'cut') return new Set<string>()
-  return new Set(clipboard.paths)
-})
+const cutPathSet = computed(() => fileClipboard.cutPathSet)
 const visibleEntries = computed(() => {
   const filteredEntries = settings.showHiddenFiles
     ? entries.value
@@ -148,17 +147,42 @@ const {
   },
 })
 
+// 系统文件拖入（Finder/Explorer → Wails）：模块级全局监听，唯一确认框。
+// 每个面板注册自己的 currentDir/onOperationComplete；坐标命中哪个面板就弹哪个。
+const {
+  panelId: systemDropPanelId,
+  showConfirm: showSystemDropConfirm,
+  drop: systemDrop,
+  onConfirm: confirmSystemDropAction,
+  onCancel: cancelSystemDropAction,
+  activate: activateSystemDropPanel,
+} = useSystemFileDrop({
+  currentDir: () => props.path,
+  onOperationComplete: (action, results) => {
+    if (action === 'move') {
+      operationHistory.recordMove(results)
+    } else {
+      operationHistory.recordCopy(results)
+    }
+  },
+})
+
 const showConfirm = ref(false)
 watch(pendingDrop, (val) => { showConfirm.value = !!val })
 
 function onConfirm(action: 'move' | 'copy', conflict: 'overwrite' | 'skip' | 'rename') {
   showConfirm.value = false
+  if (showSystemDropConfirm.value) {
+    confirmSystemDropAction(action, conflict)
+    return
+  }
   confirmDrop(action, conflict)
 }
 
 function onCancel() {
   showConfirm.value = false
   cancelDrop()
+  cancelSystemDropAction()
 }
 
 const emit = defineEmits<{
@@ -335,31 +359,32 @@ const contextMenuActions: ContextMenuAction[] = [
     key: 'copy',
     label: '复制',
     targets: ['entry'],
-    run: (target) => {
+    run: async (target) => {
       if (target.kind !== 'entry') return
       const paths = operationEntriesForEntry(target.entry).map(entry => entry.path)
-      fileClipboard.setClipboard(paths, 'copy')
-      message.success('已复制到应用剪贴板')
+      const ok = await fileClipboard.copyToSystem(paths, 'copy')
+      if (ok) message.success(paths.length > 1 ? `已复制 ${paths.length} 项到系统剪贴板` : '已复制到系统剪贴板')
+      else message.error('复制到系统剪贴板失败')
     },
   },
   {
     key: 'cut',
     label: '剪切',
     targets: ['entry'],
-    run: (target) => {
+    run: async (target) => {
       if (target.kind !== 'entry') return
       const paths = operationEntriesForEntry(target.entry).map(entry => entry.path)
-      fileClipboard.setClipboard(paths, 'cut')
-      message.success('已剪切到应用剪贴板')
+      const ok = await fileClipboard.copyToSystem(paths, 'cut')
+      if (ok) message.success(paths.length > 1 ? `已剪切 ${paths.length} 项到系统剪贴板` : '已剪切到系统剪贴板')
+      else message.error('剪切到系统剪贴板失败')
     },
   },
   {
     key: 'paste',
     label: '粘贴',
     targets: ['blank'],
-    disabled: () => !fileClipboard.hasClipboard.value,
     run: async (target) => {
-      if (target.kind !== 'blank' || !fileClipboard.clipboard.value) return
+      if (target.kind !== 'blank') return
       await pasteClipboardEntriesToDir(target.dir)
     },
   },
@@ -1134,18 +1159,28 @@ async function openCurrentEntry() {
   await openEntries(operationEntriesForEntry(entry))
 }
 
-function copyCurrentEntries() {
+async function copyCurrentEntries() {
   const entries = fileOperationEntriesForCurrent()
   if (entries.length === 0) return
-  fileClipboard.setClipboard(entries.map(entry => entry.path), 'copy')
-  message.success(entries.length > 1 ? `已复制 ${entries.length} 项到应用剪贴板` : '已复制到应用剪贴板')
+  const paths = entries.map(entry => entry.path)
+  const ok = await fileClipboard.copyToSystem(paths, 'copy')
+  if (!ok) {
+    message.error('复制到系统剪贴板失败')
+    return
+  }
+  message.success(entries.length > 1 ? `已复制 ${entries.length} 项到系统剪贴板` : '已复制到系统剪贴板')
 }
 
-function cutCurrentEntries() {
+async function cutCurrentEntries() {
   const entries = fileOperationEntriesForCurrent()
   if (entries.length === 0) return
-  fileClipboard.setClipboard(entries.map(entry => entry.path), 'cut')
-  message.success(entries.length > 1 ? `已剪切 ${entries.length} 项到应用剪贴板` : '已剪切到应用剪贴板')
+  const paths = entries.map(entry => entry.path)
+  const ok = await fileClipboard.copyToSystem(paths, 'cut')
+  if (!ok) {
+    message.error('剪切到系统剪贴板失败')
+    return
+  }
+  message.success(entries.length > 1 ? `已剪切 ${entries.length} 项到系统剪贴板` : '已剪切到系统剪贴板')
 }
 
 async function pasteClipboardEntries() {
@@ -1153,14 +1188,31 @@ async function pasteClipboardEntries() {
 }
 
 async function pasteClipboardEntriesToDir(targetDir: string) {
-  const clipboard = fileClipboard.clipboard.value
-  if (!clipboard) return
-  const { paths, mode } = clipboard
+  let content
+  try {
+    content = await FileTransferService.ClipboardFiles()
+  } catch (err) {
+    console.error('Read system clipboard failed:', err)
+    message.error('读取系统剪贴板失败')
+    return
+  }
+  const paths = content?.paths || []
+  if (paths.length === 0) {
+    message.info('系统剪贴板中没有文件')
+    return
+  }
+  const mode: ClipboardMode = content.op === ClipboardOperation.ClipboardMove ? 'cut' : 'copy'
   try {
     if (mode === 'cut') {
       const results = await trackOperationPromise(FileService.MoveEntries(paths, targetDir, 'rename'))
       operationHistory.recordMove(results)
       fileClipboard.clearClipboard()
+      // 移动语义已消费：清空系统剪贴板，避免残留剪切态
+      try {
+        await FileTransferService.ClearClipboard()
+      } catch {
+        // 清空失败不阻断（系统可能拒绝写入）
+      }
     } else {
       const results = await trackOperationPromise(FileService.CopyEntries(paths, targetDir, 'rename'))
       operationHistory.recordCopy(results)
@@ -1445,6 +1497,7 @@ function friendlyActionError(err: unknown): string {
 
 function activateShortcutScope() {
   activeFileTableShortcutScopeId = shortcutScopeId
+  activateSystemDropPanel()
 }
 
 onMounted(() => {
@@ -1484,7 +1537,7 @@ function handleEscapeShortcut() {
     closeHistoryConfirmModal()
     return
   }
-  if (showConfirm.value) {
+  if (showConfirm.value || showSystemDropConfirm.value) {
     onCancel()
     return
   }
@@ -1689,7 +1742,7 @@ const shortcutActions: CategorizedShortcutAction[] = [
   { id: 'toggle-current-selection', category: 'selection', label: '切换当前项选择', keys: [{ key: 'space' }], run: () => toggleCurrentEntrySelection(), disabled: () => !multiSelectMode.value },
   { id: 'help', category: 'dialog', label: '显示热键速查表', keys: [{ key: '?', shift: true }], run: () => { shortcutHelpModal.value = true } },
   { id: 'copy', category: 'file', label: '复制当前项', keys: [{ key: 'y' }, { key: 'c', ctrlOrMeta: true }], run: () => copyCurrentEntries() },
-  { id: 'paste', category: 'file', label: '粘贴到当前目录', keys: [{ key: 'p' }, { key: 'v', ctrlOrMeta: true }], run: () => pasteClipboardEntries(), disabled: () => !fileClipboard.hasClipboard.value },
+  { id: 'paste', category: 'file', label: '粘贴到当前目录', keys: [{ key: 'p' }, { key: 'v', ctrlOrMeta: true }], run: () => pasteClipboardEntries() },
   { id: 'undo', category: 'file', label: '撤销', keys: [{ key: 'u' }, { key: 'z', ctrlOrMeta: true }], run: () => requestUndoOperation(), disabled: () => !operationHistory.canUndo.value },
   { id: 'redo', category: 'file', label: '重做', keys: [{ key: 'r', ctrl: true }, { key: 'z', ctrlOrMeta: true, shift: true }, { key: 'y', ctrlOrMeta: true }], run: () => requestRedoOperation(), disabled: () => !operationHistory.canRedo.value },
   { id: 'cut', category: 'file', label: '剪切当前项', keys: [{ key: 'x' }, { key: 'x', ctrlOrMeta: true }], run: () => cutCurrentEntries() },
@@ -1745,6 +1798,7 @@ useKeyboardShortcuts(() => shortcutActions, {
     ref="fileTableRef"
     class="file-table"
     :class="{ 'find-mode-active': findModeActive }"
+    :data-panel-id="systemDropPanelId"
     tabindex="-1"
     @pointerdown="activateShortcutScope"
     @mousedown="onFileTableMousedown"
@@ -1901,6 +1955,7 @@ useKeyboardShortcuts(() => shortcutActions, {
     <div
       ref="tableAreaRef"
       class="table-area"
+      data-file-drop-target
       @dragover="onDragOver"
       @dragenter="onDragEnter"
       @dragleave="onDragLeave"
@@ -1928,7 +1983,7 @@ useKeyboardShortcuts(() => shortcutActions, {
             contextActivePath === row.path ? 'context-active-entry' : '',
             currentRowKey === row.path ? 'current-entry' : '',
             selectedPathSet.has(row.path) ? 'selected-entry' : '',
-            cutPathSet.has(row.path) ? 'cut-entry' : '',
+            cutPathSet.value.has(row.path) ? 'cut-entry' : '',
             findModeActive && isFindModeMatchedEntry(row) ? 'find-mode-matched-entry' : '',
             findModeActive && !isFindModeMatchedEntry(row) ? 'find-mode-unmatched-entry' : '',
           ].filter(Boolean).join(' '),
@@ -1961,9 +2016,9 @@ useKeyboardShortcuts(() => shortcutActions, {
       />
     </div>
     <DropConfirmModal
-      :show="showConfirm"
-      :sources="pendingDrop?.paths || []"
-      :target-dir="pendingDrop?.targetDir || ''"
+      :show="showConfirm || showSystemDropConfirm"
+      :sources="(showSystemDropConfirm ? systemDrop?.paths : pendingDrop?.paths) || []"
+      :target-dir="(showSystemDropConfirm ? systemDrop?.targetDir : pendingDrop?.targetDir) || ''"
       @confirm="onConfirm"
       @update:show="(v: boolean) => !v && onCancel()"
     />

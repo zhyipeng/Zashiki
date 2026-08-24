@@ -11,9 +11,11 @@ import (
 	"strings"
 
 	"zashiki/internal/filemanager"
+	"zashiki/internal/nativefs"
 	"zashiki/internal/settings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
@@ -109,6 +111,7 @@ func main() {
 		Services: []application.Service{
 			application.NewService(&filemanager.FileService{}),
 			application.NewService(&settings.SettingsService{}),
+			application.NewService(nativefs.NewFileTransferService()),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),
@@ -124,8 +127,9 @@ func main() {
 	// 'Mac' options tailor the window when running on macOS.
 	// 'BackgroundColour' is the background colour of the window.
 	// 'URL' is the URL that will be loaded into the webview.
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "Zashiki",
+	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:          "Zashiki",
+		EnableFileDrop: true,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,
@@ -135,6 +139,20 @@ func main() {
 		URL:              "/",
 		Width:            1200,
 		Height:           800,
+	})
+
+	// 转发系统文件拖入事件给前端（含落点元素详情），由前端映射到目标目录并
+	// 执行复制/移动。
+	win.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		files := event.Context().DroppedFiles()
+		if len(files) == 0 {
+			return
+		}
+		details := event.Context().DropTargetDetails()
+		app.Event.Emit("window:files-dropped", map[string]any{
+			"files":   files,
+			"details": details,
+		})
 	})
 
 	// Run the application. This blocks until the application has been exited.

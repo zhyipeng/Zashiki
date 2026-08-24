@@ -38,6 +38,7 @@ const rootNode = ref<TreeNode>(createLeaf(nextId++, ''))
 const focusedId = ref(1)
 const selectionStatusById = ref<Record<number, SelectionStatus>>({})
 let cleanupTheme: (() => void) | null = null
+let clipboardPollTimer: number | null = null
 
 const clipboardStatusText = computed(() => {
   const clipboard = fileClipboard.clipboard.value
@@ -57,6 +58,9 @@ onMounted(async () => {
   cleanupTheme = mountTheme()
   bindOperationProgressEvents()
   window.addEventListener('keydown', onGlobalKeydown)
+  clipboardPollTimer = window.setInterval(() => {
+    void fileClipboard.refreshSequence()
+  }, 2000)
   try {
     const [home, sep, rootDirs, trash] = await Promise.all([
       FileService.GetHomeDir(),
@@ -79,6 +83,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (clipboardPollTimer !== null) {
+    window.clearInterval(clipboardPollTimer)
+    clipboardPollTimer = null
+  }
   window.removeEventListener('keydown', onGlobalKeydown)
   cleanupTheme?.()
   cleanupTheme = null
