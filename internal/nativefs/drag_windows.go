@@ -4,21 +4,27 @@ package nativefs
 
 import (
 	"fmt"
-	"runtime"
+	"path/filepath"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
 // Windows 原生拖出（Wails → Explorer）。
 //
 // 方案：构建一个最小的 IDataObject（暴露 CF_HDROP + Preferred DropEffect），
-// 在专用 OLE STA 线程上调用 SHDoDragDrop(hwnd, dataObject, NULL, effects,
-// &effect)。SHDoDragDrop 阻塞直到用户释放/Esc，返回实际触发的 effect
-// （copy/move/link），供前端判断是否刷新源目录。
+// 调用 SHDoDragDrop(hwnd, dataObject, NULL, effects, &effect)。SHDoDragDrop
+// 阻塞直到用户释放/Esc，返回实际触发的 effect（copy/move/link），供前端
+// 判断是否刷新源目录。
 //
-// 线程模型：OLE/拖拽要求 STA。Wails 的 RPC 在 goroutine 中执行，因此
-// StartDrag 在独立 STA 线程运行 SHDoDragDrop，阻塞等待其返回（与消息循环
-// 互不冲突——SHDoDragDrop 自带 message loop）。
+// 线程模型：SHDoDragDrop 内部运行自己的消息循环，并要求调用线程就是拥有
+// 源窗口 hwnd 的线程（Wails 主线程）。拖拽期间 OLE 需要对 hwnd 设置鼠标
+// 捕获，而只有拥有窗口的线程允许 SetCapture；鼠标消息（WM_MOUSEMOVE /
+// WM_LBUTTONUP）也只投递到拥有窗口的主线程消息队列。若像早期实现那样在
+// 独立 worker goroutine 上调用：SetCapture 失败、拖拽循环永远收不到鼠标
+// 消息 → 拖拽无反馈、无法落下、RPC 持续挂起（表现为「无效且无报错」）。
+// 因此与 darwin 一致，通过 dispatchOnMain（application.InvokeSync）把整个
+// 拖拽会话调度到主线程执行。
 
 var (
 	ole32ForDrag = syscall.NewLazyDLL("ole32.dll")
@@ -30,6 +36,8 @@ var (
 	procSHCreateDataObject = shell32Drag.NewProc("SHCreateDataObject")
 	procILCreateFromPath   = shell32Drag.NewProc("ILCreateFromPathW")
 	procILFree             = shell32Drag.NewProc("ILFree")
+	procILClone            = shell32Drag.NewProc("ILClone")
+	procILFindLastID       = shell32Drag.NewProc("ILFindLastID")
 )
 
 // IID_IDataObject = {0000010E-0000-0000-C000-000000000046}
@@ -47,30 +55,43 @@ type guid struct {
 	Data4 [8]byte
 }
 
-// startWindowsDrag 在 OLE STA 线程上执行 SHDoDragDrop。
+// dragTimeout 拖拽会话总时限（超时避免 RPC 永久挂起，与 darwin 一致）。
+const dragTimeout = 60 * time.Second
+
+// startWindowsDrag 在拥有 hwnd 的线程（Wails 主线程）上执行 SHDoDragDrop。
 func startWindowsDrag(paths []string, effects DropEffect) (DropEffect, error) {
+	if len(paths) == 0 {
+		return 0, fmt.Errorf("no paths for drag")
+	}
 	hwnd := getWindowHandle()
 	if hwnd == 0 {
 		return 0, fmt.Errorf("no window handle for drag")
 	}
 
-	resultCh := make(chan dragResult, 1)
+	done := make(chan dragResult, 1)
 	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
+		dispatchOnMain(func() {
+			hr := oleInitializeOnThread()
+			// S_OK=0 或 S_FALSE=1 均为成功；其他（如 RPC_E_CHANGED_MODE）
+			// 说明该线程已是 MTA，无法在其上运行 OLE 拖拽。
+			if hr != 0 && hr != 1 {
+				done <- dragResult{err: fmt.Errorf("OleInitialize failed: 0x%08x", hr)}
+				return
+			}
+			defer procOleUninitialize.Call()
 
-		hr := oleInitializeOnThread()
-		if hr != 0 {
-			resultCh <- dragResult{err: fmt.Errorf("OleInitialize failed: 0x%08x", hr)}
-			return
-		}
-		defer procOleUninitialize.Call()
-
-		effect, err := runSHDoDragDrop(hwnd, paths, effects)
-		resultCh <- dragResult{effect: effect, err: err}
+			effect, err := runSHDoDragDrop(hwnd, paths, effects)
+			done <- dragResult{effect: effect, err: err}
+		})
 	}()
-	res := <-resultCh
-	return res.effect, res.err
+
+	select {
+	case res := <-done:
+		return res.effect, res.err
+	case <-time.After(dragTimeout):
+		// 兜底：拖拽异常未结束时避免 StartDrag 入口永久挂起。
+		return 0, fmt.Errorf("native drag timed out after %s", dragTimeout)
+	}
 }
 
 type dragResult struct {
@@ -86,17 +107,19 @@ func oleInitializeOnThread() uintptr {
 
 // runSHDoDragDrop 构建数据对象并调用 SHDoDragDrop。
 func runSHDoDragDrop(hwnd uintptr, paths []string, effects DropEffect) (DropEffect, error) {
-	dataObject, err := buildFileDataObject(paths)
+	dragObj, err := buildFileDataObject(paths)
 	if err != nil {
 		return 0, err
 	}
-	defer releaseIDataObject(dataObject)
+	// 数据对象借用 folder/child PIDL，必须保持存活直到拖拽结束（跨进程
+	// 渲染 CF_HDROP 时才读取它们），因此拖拽返回后再统一释放。
+	defer dragObj.Release()
 
 	var dwEffect uint32
 	// SHDoDragDrop(hwnd, pdata, pdropSource, dwOKEffects, pdwEffect)
 	ret, _, _ := procSHDoDragDrop.Call(
 		hwnd,
-		dataObject,
+		dragObj.obj,
 		0, // pdropSource (nil)
 		uintptr(effects),
 		uintptr(unsafe.Pointer(&dwEffect)),
@@ -112,58 +135,107 @@ func runSHDoDragDrop(hwnd uintptr, paths []string, effects DropEffect) (DropEffe
 
 // ---- IDataObject 构建（SHCreateDataObject） ----
 
-// buildFileDataObject 用 SHCreateDataObject 从 PIDL 数组创建 Shell 数据对象。
-// 这比手写 COM vtable 稳定，且 Explorer 完全识别。
-func buildFileDataObject(paths []string) (uintptr, error) {
+// dragDataObject 持有 Shell 数据对象及其借用的 PIDL。
+//
+// SHCreateDataObject 只「借用」传入的父目录 PIDL 与子 PIDL、不会复制；
+// 数据对象在跨进程渲染（GetData/拖放目标读取 CF_HDROP）时才真正读取它们。
+// 因此这些 PIDL 必须保持存活直到数据对象释放，由 Release 统一清理。
+type dragDataObject struct {
+	obj      uintptr   // IDataObject*
+	folder   uintptr   // 父目录 PIDL
+	children []uintptr // 子 PIDL 数组
+}
+
+func (d *dragDataObject) Release() {
+	if d == nil {
+		return
+	}
+	if d.obj != 0 {
+		releaseIDataObject(d.obj)
+	}
+	if d.folder != 0 {
+		procILFree.Call(d.folder)
+	}
+	for _, c := range d.children {
+		if c != 0 {
+			procILFree.Call(c)
+		}
+	}
+	*d = dragDataObject{}
+}
+
+// buildFileDataObject 用 SHCreateDataObject 创建文件拖拽数据对象。
+//
+// 关键（踩坑记录）：pidlFolder 必须传「父目录 PIDL」而非 NULL，apidl 传
+// 相对父目录的「子 PIDL」。早期实现传 NULL folder + 绝对 PIDL，在部分
+// Windows 上会生成一个不暴露任何格式的空对象 —— Explorer 的
+// QueryGetData(CF_HDROP) 失败 → 光标始终「禁止」、无法释放。
+func buildFileDataObject(paths []string) (*dragDataObject, error) {
 	if len(paths) == 0 {
-		return 0, fmt.Errorf("no paths for drag")
+		return nil, fmt.Errorf("no paths for drag")
 	}
 
-	pidls := make([]uintptr, len(paths))
-	released := false
-	defer func() {
-		if !released {
-			for _, pidl := range pidls {
-				if pidl != 0 {
-					procILFree.Call(pidl)
-				}
+	folder := filepath.Dir(paths[0])
+	if len(folder) == 2 && folder[1] == ':' {
+		folder += `\` // 卷根（如 C:\a.txt）时 filepath.Dir 返回 "C:"，需补反斜杠
+	}
+	folderPidl, err := createPIDLFromPath(folder)
+	if err != nil {
+		return nil, err
+	}
+
+	children := make([]uintptr, len(paths))
+	cleanupChildren := func() {
+		for _, c := range children {
+			if c != 0 {
+				procILFree.Call(c)
 			}
 		}
-	}()
+		procILFree.Call(folderPidl)
+	}
 
 	for i, p := range paths {
-		pidl, err := createPIDLFromPath(p)
+		abs, err := createPIDLFromPath(p)
 		if err != nil {
-			return 0, err
+			cleanupChildren()
+			return nil, err
 		}
-		pidls[i] = pidl
+		child, _, _ := procILFindLastID.Call(abs)
+		if child == 0 {
+			procILFree.Call(abs)
+			cleanupChildren()
+			return nil, fmt.Errorf("ILFindLastID failed for %q", p)
+		}
+		// 克隆子 PIDL：abs 即将释放，而数据对象会借用它
+		clone, _, _ := procILClone.Call(child)
+		procILFree.Call(abs)
+		if clone == 0 {
+			cleanupChildren()
+			return nil, fmt.Errorf("ILClone failed for %q", p)
+		}
+		children[i] = clone
 	}
 
 	var dataObject uintptr
 	// SHCreateDataObject(pcidlFolder, cidl, apidl, pdtInner, riid, ppv)
 	ret, _, _ := procSHCreateDataObject.Call(
-		0,
-		uintptr(len(pidls)),
-		uintptr(unsafe.Pointer(&pidls[0])),
+		folderPidl,
+		uintptr(len(children)),
+		uintptr(unsafe.Pointer(&children[0])),
 		0,
 		uintptr(unsafe.Pointer(iidIDataObject)),
 		uintptr(unsafe.Pointer(&dataObject)),
 	)
 	if uint32(ret) != 0 {
-		return 0, fmt.Errorf("SHCreateDataObject failed: 0x%08x", uint32(ret))
+		cleanupChildren()
+		return nil, fmt.Errorf("SHCreateDataObject failed: 0x%08x", uint32(ret))
 	}
 	if dataObject == 0 {
-		return 0, fmt.Errorf("SHCreateDataObject returned nil")
+		cleanupChildren()
+		return nil, fmt.Errorf("SHCreateDataObject returned nil")
 	}
 
-	released = true
-	// 释放 PIDL（数据对象已持有引用）
-	for _, pidl := range pidls {
-		if pidl != 0 {
-			procILFree.Call(pidl)
-		}
-	}
-	return dataObject, nil
+	return &dragDataObject{obj: dataObject, folder: folderPidl, children: children}, nil
 }
 
 // createPIDLFromPath 用 ILCreateFromPathW 从路径创建 PIDL。
