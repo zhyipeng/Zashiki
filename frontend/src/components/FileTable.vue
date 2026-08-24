@@ -15,8 +15,9 @@ import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/fil
 import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined, SearchOutlined, UndoSharp, RedoSharp } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
-import { useDragDrop, clearDrag } from '../composables/useDragDrop'
+import { useDragDrop } from '../composables/useDragDrop'
 import { useSystemFileDrop } from '../composables/useSystemFileDrop'
+import { createNativeDragOut } from '../composables/nativeDragOut'
 import { useFileClipboard } from '../composables/useFileClipboard'
 import type { ClipboardMode } from '../composables/clipboardState'
 import { formatShortcutBinding, useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
@@ -135,7 +136,6 @@ const directoryEventToken = useDirectoryEvents(() => props.path, () => {
 const {
   isDragOver, dragLabel, hoveredFolderPath,
   pendingDrop, confirmDrop, cancelDrop,
-  onRowDragStart,
   onDragOver, onDragEnter, onDragLeave, onDrop,
 } = useDragDrop(() => props.path, {
   onOperationComplete: (action, results) => {
@@ -169,6 +169,29 @@ const {
 
 const showConfirm = ref(false)
 watch(pendingDrop, (val) => { showConfirm.value = !!val })
+
+// ---- 原生拖出（Wails → 系统 Finder/Explorer）----
+// 不用 HTML draggable：pointer 阈值检测 + FileTransferService.StartDrag。
+const nativeDragOut = createNativeDragOut({
+  onDragStart: async (paths, point) => {
+    if (paths.length === 0) return
+    try {
+      const effect = await FileTransferService.StartDrag(paths, Math.round(point.x), Math.round(point.y))
+      // 若最终为 move（用户按住修饰键/目标为移动），源文件可能已消失，刷新当前目录
+      if ((effect & 2) !== 0) {
+        refresh()
+      }
+    } catch (err) {
+      console.error('Native drag out failed:', err)
+    }
+  },
+})
+
+// 拖拽开始时快照路径（与选中状态一致；parent 行不可拖拽）
+function nativeDragPathsForRow(row: FileEntry): string[] {
+  if (isParentEntry(row)) return []
+  return operationEntriesForEntry(row).map(entry => entry.path)
+}
 
 function onConfirm(action: 'move' | 'copy', conflict: 'overwrite' | 'skip' | 'rename') {
   showConfirm.value = false
@@ -1271,11 +1294,6 @@ function operationEntriesForEntry(entry: FileEntry): FileEntry[] {
   return [entry]
 }
 
-function dragPathsForRow(row: FileEntry): string[] {
-  if (isParentEntry(row)) return []
-  return operationEntriesForEntry(row).map(entry => entry.path)
-}
-
 function pathsForCopyPath(target: ContextTarget): string[] {
   if (target.kind === 'blank') {
     return [target.dir]
@@ -1988,9 +2006,14 @@ useKeyboardShortcuts(() => shortcutActions, {
             findModeActive && !isFindModeMatchedEntry(row) ? 'find-mode-unmatched-entry' : '',
           ].filter(Boolean).join(' '),
           'data-folder-path': row.isDir && !isParentEntry(row) ? row.path : undefined,
-          draggable: !isParentEntry(row),
-          onDragstart: (e: DragEvent) => onRowDragStart(e, row, dragPathsForRow(row)),
-          onDragend: () => clearDrag(),
+          onPointerdown: (e: PointerEvent) => {
+            nativeDragOut.onPointerDown({ x: e.clientX, y: e.clientY }, nativeDragPathsForRow(row))
+          },
+          onPointermove: (e: PointerEvent) => {
+            nativeDragOut.onPointerMove({ x: e.clientX, y: e.clientY })
+          },
+          onPointerup: () => nativeDragOut.onPointerUp(),
+          onPointercancel: () => nativeDragOut.onPointerUp(),
           onClick: (e: MouseEvent) => onRowClick(e, row),
           onDblclick: () => onRowDblclick(row),
           onContextmenu: (e: MouseEvent) => onRowContextMenu(e, row),

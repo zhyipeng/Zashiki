@@ -155,6 +155,16 @@ func main() {
 		})
 	})
 
+	// 注入原生窗口句柄提供器：原生拖出（SHDoDragDrop / 拖拽会话）需要窗口句柄。
+	nativefs.SetWindowProvider(func() uintptr {
+		return uintptr(win.NativeWindow())
+	})
+
+	// 注入主线程调度器：AppKit 拖拽会话必须在主线程启动。
+	nativefs.SetMainThreadDispatcher(func(fn func()) {
+		application.InvokeSync(fn)
+	})
+
 	// Run the application. This blocks until the application has been exited.
 	err := app.Run()
 

@@ -16,6 +16,9 @@ type fakeTransfer struct {
 	readErr        error
 	seqErr         error
 	clearErr       error
+	dragErr        error
+	dragEffect     DropEffect
+	dragPaths      []string
 	clipboardCalls int
 	cleared        bool
 }
@@ -42,6 +45,11 @@ func (f *fakeTransfer) CurrentSequence() (uint64, error) {
 func (f *fakeTransfer) ClearClipboard() error {
 	f.cleared = true
 	return f.clearErr
+}
+
+func (f *fakeTransfer) StartDrag(paths []string, x, y int, effects DropEffect) (DropEffect, error) {
+	f.dragPaths = append([]string(nil), paths...)
+	return f.dragEffect, f.dragErr
 }
 
 func TestServiceCopyDelegates(t *testing.T) {

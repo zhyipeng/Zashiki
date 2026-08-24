@@ -61,5 +61,19 @@ export enum ClipboardOperation {
     ClipboardMove = 1,
 };
 
+/**
+ * DropEffect 表示拖拽操作允许的效果位（与 Windows DROPEFFECT / 调研定义一致）。
+ */
+export enum DropEffect {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = 0,
+
+    DropEffectCopy = 1,
+    DropEffectMove = 2,
+    DropEffectLink = 4,
+};
+
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);

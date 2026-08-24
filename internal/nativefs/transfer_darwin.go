@@ -26,10 +26,15 @@ import (
 )
 
 // darwinTransfer 基于 NSPasteboard + NSURL（AppKit，见 transfer_darwin.m）。
-type darwinTransfer struct{}
+// 原生拖出由 darwinDrag（drag_darwin.go + drag_darwin.m）实现。
+type darwinTransfer struct {
+	drag *darwinDrag
+}
 
 func newPlatformTransfer() FileTransfer {
-	return &darwinTransfer{}
+	return &darwinTransfer{
+		drag: newDarwinDrag(),
+	}
 }
 
 // Copy 把 paths 作为文件引用以复制语义写入系统剪贴板。
@@ -109,4 +114,9 @@ func (t *darwinTransfer) CurrentSequence() (uint64, error) {
 func (t *darwinTransfer) ClearClipboard() error {
 	C.clearPasteboard()
 	return nil
+}
+
+// StartDrag 启动原生拖出（Wails → Finder），阻塞直到拖拽结束。
+func (t *darwinTransfer) StartDrag(paths []string, x, y int, effects DropEffect) (DropEffect, error) {
+	return t.drag.StartDrag(paths, x, y, effects)
 }

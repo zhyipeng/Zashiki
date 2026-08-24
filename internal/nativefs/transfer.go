@@ -49,10 +49,52 @@ type FileTransfer interface {
 	CurrentSequence() (uint64, error)
 	// ClearClipboard 清空系统剪贴板（剪切粘贴完成后消费剪切态）。
 	ClearClipboard() error
+	// StartDrag 启动原生拖出，阻塞直到拖拽结束（Drop 或 Esc）。
+	// effects 声明允许的效果位；x/y 为前端 CSS 坐标（逻辑点，左上原点），
+	// 用于合成平台拖拽事件。返回用户实际触发/系统决定的效果（如 move）。
+	StartDrag(paths []string, x, y int, effects DropEffect) (DropEffect, error)
 }
 
-// ErrNotImplemented 表示对应平台/能力尚未实现（目前仅第 4 步原生拖出）。
+// ErrNotImplemented 表示对应平台/能力尚未实现（目前仅 Linux 原生拖出）。
 var ErrNotImplemented = errors.New("not implemented")
+
+// WindowProvider 返回平台原生窗口句柄（Windows: HWND；darwin: NSWindow*）。
+// 由 main.go 在窗口创建后注入，nativefs 保持与 Wails 解耦。
+type WindowProvider func() uintptr
+
+// MainThreadDispatcher 在应用主线程上同步执行 fn（AppKit/COM 等要求主线程）。
+// 由 main.go 注入 application.InvokeSync。
+type MainThreadDispatcher func(fn func())
+
+var windowProvider WindowProvider
+var mainThreadDispatcher MainThreadDispatcher
+
+// SetWindowProvider 注册窗口句柄提供器（应用启动时调用一次）。
+func SetWindowProvider(p WindowProvider) {
+	windowProvider = p
+}
+
+// SetMainThreadDispatcher 注册主线程调度器（应用启动时调用一次）。
+func SetMainThreadDispatcher(d MainThreadDispatcher) {
+	mainThreadDispatcher = d
+}
+
+// getWindowHandle 返回当前窗口句柄（无提供器/未注册时为 0）。
+func getWindowHandle() uintptr {
+	if windowProvider == nil {
+		return 0
+	}
+	return windowProvider()
+}
+
+// dispatchOnMain 在主线程上执行 fn；未注入调度器时直接执行。
+func dispatchOnMain(fn func()) {
+	if mainThreadDispatcher == nil {
+		fn()
+		return
+	}
+	mainThreadDispatcher(fn)
+}
 
 // NewFileTransfer 返回当前平台的 FileTransfer 实现。
 func NewFileTransfer() FileTransfer {

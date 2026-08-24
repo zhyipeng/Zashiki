@@ -51,6 +51,12 @@ func (t *windowsTransfer) ClearClipboard() error {
 	})
 }
 
+// StartDrag 启动原生拖出（Wails → Explorer）。
+// 实现说明：见 drag_windows.go（复用 CF_HDROP + SHDoDragDrop，需要 OLE STA 线程）。
+func (t *windowsTransfer) StartDrag(paths []string, x, y int, effects DropEffect) (DropEffect, error) {
+	return startWindowsDrag(paths, effects)
+}
+
 // ---- 剪贴板写入 ----
 
 const (

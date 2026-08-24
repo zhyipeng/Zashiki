@@ -38,3 +38,10 @@ func (s *FileTransferService) ClipboardSequence() (uint64, error) {
 func (s *FileTransferService) ClearClipboard() error {
 	return s.transfer.ClearClipboard()
 }
+
+// StartDrag 启动原生拖出，阻塞直到拖拽结束。返回最终 effect（copy/move/link），
+// 供前端判断是否需要刷新源目录（如 move 后源文件已消失）。
+// x/y 为前端指针坐标（CSS 逻辑点，左上原点），用于合成平台拖拽事件。
+func (s *FileTransferService) StartDrag(paths []string, x, y int) (DropEffect, error) {
+	return s.transfer.StartDrag(paths, x, y, DropEffectCopy|DropEffectMove)
+}

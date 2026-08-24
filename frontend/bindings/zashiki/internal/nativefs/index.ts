@@ -8,5 +8,6 @@ export {
 
 export {
     ClipboardContent,
-    ClipboardOperation
+    ClipboardOperation,
+    DropEffect
 } from "./models.js";

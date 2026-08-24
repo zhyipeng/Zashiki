@@ -85,6 +85,12 @@ func (t *linuxTransfer) ClearClipboard() error {
 	return writeClipboardText("", "text/uri-list")
 }
 
+// StartDrag 启动原生拖出。Linux 暂无系统级原生拖出（GTK WebKit 拖拽
+// 语义与 Finder/Explorer 不同）；返回 ErrNotImplemented 并保留能力扩展点。
+func (t *linuxTransfer) StartDrag(paths []string, x, y int, effects DropEffect) (DropEffect, error) {
+	return 0, ErrNotImplemented
+}
+
 // ---- 文本编解码 ----
 
 // buildURIText 生成 text/uri-list 内容（每行一个 file:// URI）。

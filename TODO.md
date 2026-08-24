@@ -29,7 +29,10 @@
     - [x] 系统文件拖入（WindowFilesDropped + data-file-drop-target）
     - [x] Ctrl+C/X → 系统剪贴板（darwin/windows/linux）
     - [x] 从系统剪贴板粘贴（含 Finder 复制到 Zashiki）
-    - [ ] 原生拖出（第 4 步，WebView→AppKit/Shell 桥接）
+    - [x] 原生拖出（Wails → Finder/Explorer）
+      - [x] darwin：prepare + LeftMouseDragged monitor + beginDraggingSession
+      - [x] windows：SHCreateDataObject + SHDoDragDrop（OLE STA 线程）
+      - [ ] linux：GTK 拖出（暂无系统级方案，保留能力点）
 
 ### p3 - 暂时没想到解决方案
   - [x] FileTable 空白区域
