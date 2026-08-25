@@ -370,3 +370,19 @@ func TestFileService_MoveEntriesRejectsDirectoryToChildWithoutDeletingSource(t *
 		t.Fatalf("destination child should not be created, stat error = %v", statErr)
 	}
 }
+
+func TestFileService_GetInitialDir(t *testing.T) {
+	dir := t.TempDir()
+
+	// 未指定时回退到 home
+	s := &FileService{}
+	if got := s.GetInitialDir(); got == "" {
+		t.Error("GetInitialDir() with no initial dir should not be empty")
+	}
+
+	// 指定后返回指定目录
+	s.SetInitialDir(dir)
+	if got := s.GetInitialDir(); got != dir {
+		t.Errorf("GetInitialDir() = %q, want %q", got, dir)
+	}
+}

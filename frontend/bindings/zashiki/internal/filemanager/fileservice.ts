@@ -88,6 +88,14 @@ export function GetHomeDir(): $CancellablePromise<string> {
     return $Call.ByID(4140196485);
 }
 
+/**
+ * GetInitialDir 返回应用启动时应该打开的目录。若通过命令行传入了有效目录则
+ * 返回该目录，否则回退到 home 目录。
+ */
+export function GetInitialDir(): $CancellablePromise<string> {
+    return $Call.ByID(287175394);
+}
+
 export function GetRoots(): $CancellablePromise<$models.RootEntry[]> {
     return $Call.ByID(578700098).then(($result: any) => {
         return $$createType10($result);
@@ -168,6 +176,13 @@ export function SaveTextPreview(path: string, content: string, expectedVersion: 
     return $Call.ByID(840243591, path, content, expectedVersion).then(($result: any) => {
         return $$createType8($result);
     });
+}
+
+/**
+ * SetInitialDir 记录命令行参数指定的启动目录，供前端初始化定位。
+ */
+export function SetInitialDir(dir: string): $CancellablePromise<void> {
+    return $Call.ByID(3541394886, dir);
 }
 
 export function TrashEntries(paths: string[]): $CancellablePromise<$models.EntryOperationResult[]> {

@@ -96,9 +96,36 @@ func htmlAssetMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// resolveInitialDir 从命令行参数解析启动目录。支持 `zashiki /path/to/dir` 形式：
+// 取第一个非空且可解析为目录的绝对路径参数；无法解析时返回空串，交由前端回退到 home。
+func resolveInitialDir(args []string) string {
+	for _, arg := range args {
+		if arg == "" {
+			continue
+		}
+		abs, err := filepath.Abs(arg)
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(abs)
+		if err != nil {
+			continue
+		}
+		if !info.IsDir() {
+			continue
+		}
+		return abs
+	}
+	return ""
+}
+
 // main function serves as the application's entry point. It initializes the application, creates a window,
 // and runs the application, logging any error that might occur.
 func main() {
+
+	fileService := &filemanager.FileService{}
+	initialDir := resolveInitialDir(os.Args[1:])
+	fileService.SetInitialDir(initialDir)
 
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
@@ -109,7 +136,7 @@ func main() {
 		Name:        "Zashiki",
 		Description: "A file explorer",
 		Services: []application.Service{
-			application.NewService(&filemanager.FileService{}),
+			application.NewService(fileService),
 			application.NewService(&settings.SettingsService{}),
 			application.NewService(nativefs.NewFileTransferService()),
 		},

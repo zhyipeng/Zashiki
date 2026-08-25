@@ -62,17 +62,18 @@ onMounted(async () => {
     void fileClipboard.refreshSequence()
   }, 2000)
   try {
-    const [home, sep, rootDirs, trash] = await Promise.all([
+    const [home, sep, rootDirs, trash, initial] = await Promise.all([
       FileService.GetHomeDir(),
       FileService.GetSeparator(),
       FileService.GetRoots(),
       FileService.GetTrashInfo(),
+      FileService.GetInitialDir(),
     ])
     homeDir.value = home
     separator.value = sep || '/'
     roots.value = rootDirs || []
     trashInfo.value = trash || { label: '', path: '', available: false }
-    currentPath.value = homeDir.value
+    currentPath.value = initial || homeDir.value
   } catch (err) {
     console.error('GetHomeDir failed:', err)
     error.value = String(err)

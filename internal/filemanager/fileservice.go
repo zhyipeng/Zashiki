@@ -12,6 +12,12 @@ type FileService struct {
 	mu         sync.Mutex
 	dirCache   map[string]*dirCacheEntry
 	cacheOrder []string // LRU 序，最近使用在末尾
+	initialDir string   // 命令行指定的启动目录（空则回退到 home）
+}
+
+// SetInitialDir 记录命令行参数指定的启动目录，供前端初始化定位。
+func (f *FileService) SetInitialDir(dir string) {
+	f.initialDir = dir
 }
 
 func (f *FileService) ListDir(path string) ([]FileEntry, error) {
@@ -50,6 +56,15 @@ func (f *FileService) GetHomeDir() string {
 		return string(filepath.Separator)
 	}
 	return home
+}
+
+// GetInitialDir 返回应用启动时应该打开的目录。若通过命令行传入了有效目录则
+// 返回该目录，否则回退到 home 目录。
+func (f *FileService) GetInitialDir() string {
+	if f.initialDir != "" {
+		return f.initialDir
+	}
+	return f.GetHomeDir()
 }
 
 func (f *FileService) GetSeparator() string {
