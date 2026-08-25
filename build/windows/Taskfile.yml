@@ -164,6 +164,29 @@ tasks:
     cmds:
       - '{{.BIN_DIR}}/{{.APP_NAME}}.exe'
 
+  install:
+    summary: Installs zashiki into the user PATH (no admin needed)
+    desc: |
+      Copies the built GUI .exe to %LOCALAPPDATA%\zashiki\bin and adds that dir to
+      the *user* PATH if it is not already present. The PowerShell logic lives in
+      build/windows/install.ps1 and is invoked with `powershell -File`, because go-task
+      runs command strings through a POSIX sh interpreter that would mangle inline
+      PowerShell. The .exe itself launches detached via the windowsgui subsystem, so no
+      wrapper is needed.
+    deps:
+      - task: build
+    cmds:
+      - cmd: 'powershell -NoProfile -ExecutionPolicy Bypass -File "{{.ROOT_DIR}}/build/windows/install.ps1" -Source "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe"'
+        platforms:
+          - windows
+
+  uninstall:
+    summary: Removes zashiki from the user PATH
+    cmds:
+      - cmd: 'powershell -NoProfile -ExecutionPolicy Bypass -File "{{.ROOT_DIR}}/build/windows/uninstall.ps1"'
+        platforms:
+          - windows
+
   sign:
     summary: Signs the Windows executable
     desc: |

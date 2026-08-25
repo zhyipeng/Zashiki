@@ -182,6 +182,40 @@ tasks:
     cmds:
       - '{{.BIN_DIR}}/{{.APP_NAME}}'
 
+  install:
+    summary: Installs a non-blocking zashiki launcher into the user PATH
+    desc: |
+      Writes a `zashiki` launcher to `$HOME/.local/bin` (XDG, already on PATH, no
+      sudo) that launches the built GUI binary in the background, so `zashiki /path`
+      does not block the terminal. Override the destination with INSTALL_DIR.
+    deps:
+      - task: build
+    vars:
+      INSTALL_DIR: '{{.INSTALL_DIR | default "$HOME/.local/bin"}}'
+      BIN_PATH: '{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}'
+    cmds:
+      - |
+        set -e
+        install_dir="{{.INSTALL_DIR}}"
+        mkdir -p "$install_dir"
+        cat > "$install_dir/zashiki" <<'EOF'
+        #!/bin/sh
+        exec "{{.BIN_PATH}}" "$@" >/dev/null 2>&1 &
+        EOF
+        chmod +x "$install_dir/zashiki"
+        echo "Installed zashiki launcher to $install_dir"
+        echo "Make sure it is on your PATH (it usually already is):"
+        echo "  export PATH=\"$install_dir:\$PATH\""
+
+  uninstall:
+    summary: Removes the zashiki launcher from the user PATH
+    vars:
+      INSTALL_DIR: '{{.INSTALL_DIR | default "$HOME/.local/bin"}}'
+    cmds:
+      - |
+        rm -f "{{.INSTALL_DIR}}/zashiki"
+        echo "Removed {{.INSTALL_DIR}}/zashiki (if it existed)."
+
   sign:deb:
     summary: Signs the DEB package
     desc: |

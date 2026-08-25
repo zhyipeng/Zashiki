@@ -30,6 +30,20 @@ tasks:
     cmds:
       - task: "{{OS}}:run"
 
+  install:
+    summary: Builds and installs a cross-platform zashiki launcher into the user PATH
+    desc: |
+      Delegates to the current OS. macOS/Linux install a non-blocking `zashiki`
+      shim into $HOME/.local/bin; Windows copies Zashiki.exe into %LOCALAPPDATA%\zashiki\bin
+      and adds it to the user PATH. All are per-user (no sudo/admin).
+    cmds:
+      - task: "{{OS}}:install"
+
+  uninstall:
+    summary: Removes the zashiki launcher from the user PATH
+    cmds:
+      - task: "{{OS}}:uninstall"
+
   dev:
     summary: Runs the application in development mode
     cmds:
