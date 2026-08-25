@@ -87,13 +87,15 @@ jobs:
         run: |
           task darwin:package:dmg
 
-      # Windows ships an NSIS installer (Zashiki-amd64-installer.exe). The old
-      # workflow only uploaded the raw .exe; we now build a real installer.
+      # Windows ships a per-user NSIS installer (Zashiki-amd64-installer.exe).
+      # It installs under %LOCALAPPDATA% without a UAC prompt, and writes the
+      # install dir into the user PATH on install (removed again on uninstall), so
+      # `zashiki` is available from a new terminal.
       - name: Build Windows NSIS installer
         if: matrix.platform == 'windows'
         shell: bash
         run: |
-          task windows:package ARCH=amd64 INSTALL_SCOPE=machine
+          task windows:package ARCH=amd64 INSTALL_SCOPE=user
 
       # Linux ships deb + rpm + AppImage installers. `create:appimage` invokes
       # linuxdeploy, which downloads an AppImage; set APPIMAGE_EXTRACT_AND_RUN
