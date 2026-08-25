@@ -24,14 +24,20 @@ jobs:
             os: macos-latest
             artifact-name: zashiki-darwin-universal
             artifact-file: Zashiki-darwin-universal.zip
+            artifact-path: Zashiki-darwin-universal.zip
           - platform: windows
             os: windows-latest
             artifact-name: zashiki-windows-amd64
-            artifact-file: Zashiki-windows-amd64.zip
+            artifact-file: Zashiki-amd64-installer.exe
+            artifact-path: bin/*-installer.exe
           - platform: linux
             os: ubuntu-latest
             artifact-name: zashiki-linux-amd64
-            artifact-file: Zashiki-linux-amd64.tar.gz
+            artifact-file: Zashiki-linux-amd64
+            artifact-path: |
+              bin/*.deb
+              bin/*.rpm
+              bin/*.AppImage
 
     steps:
       - name: Checkout
@@ -65,32 +71,49 @@ jobs:
           go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - name: Build macOS app
+      - name: Install NSIS
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          choco install nsis -y
+          echo "C:\Program Files (x86)\NSIS" >> "$env:GITHUB_PATH"
+
+      # macOS ships a universal .app bundle. A DMG cannot be produced in this
+      # Wails alpha (DMG creation is temporarily disabled), so the packaged app
+      # bundle is the distribution artifact, zipped for download.
+      - name: Build macOS app bundle
         if: matrix.platform == 'darwin'
         shell: bash
         run: |
           task darwin:package:universal
           ditto -c -k --sequesterRsrc --keepParent "bin/${APP_NAME}.app" "${{ matrix.artifact-file }}"
 
-      - name: Build Windows executable
+      # Windows ships an NSIS installer (Zashiki-amd64-installer.exe). The old
+      # workflow only uploaded the raw .exe; we now build a real installer.
+      - name: Build Windows NSIS installer
         if: matrix.platform == 'windows'
         shell: bash
         run: |
-          task windows:build ARCH=amd64
-          7z a "${{ matrix.artifact-file }}" "./bin/${APP_NAME}.exe"
+          task windows:package ARCH=amd64 INSTALL_SCOPE=machine
 
-      - name: Build Linux binary
+      # Linux ships deb + rpm + AppImage installers. `create:appimage` invokes
+      # linuxdeploy, which downloads an AppImage; set APPIMAGE_EXTRACT_AND_RUN
+      # because Ubuntu runners do not ship libfuse2 anymore.
+      - name: Build Linux installers
         if: matrix.platform == 'linux'
         shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
         run: |
-          task linux:build ARCH=amd64
-          tar -czf "${{ matrix.artifact-file }}" -C bin "${APP_NAME}"
+          task linux:create:deb
+          task linux:create:rpm
+          task linux:create:appimage
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.artifact-file }}
+          path: ${{ matrix.artifact-path }}
           if-no-files-found: error
 
   release:
