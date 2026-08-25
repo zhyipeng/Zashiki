@@ -622,7 +622,7 @@ const parentEntry = computed<FileEntry | null>(() => {
     name: '..',
     path: `${parentEntryPathPrefix}${parentPath.value}`,
     size: 0,
-    modTime: null,
+    modTime: '',
     isDir: true,
     isHidden: false,
     isSymlink: false,

@@ -5,10 +5,6 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as time$0 from "../../../time/models.js";
-
 /**
  * DirPage 是 ListDirPage 的分页返回模型：entries 为单个分页切片，
  * total 为目录条目总数（分页期间条目消失仍计入，与 ListDir 的 continue 语义一致）。
@@ -104,7 +100,7 @@ export class FileEntry {
     "name": string;
     "path": string;
     "size": number;
-    "modTime": time$0.Time;
+    "modTime": string;
     "isDir": boolean;
     "isHidden": boolean;
     "isSymlink": boolean;
@@ -123,7 +119,7 @@ export class FileEntry {
             this["size"] = 0;
         }
         if (!("modTime" in $$source)) {
-            this["modTime"] = null;
+            this["modTime"] = "0001-01-01T00:00:00.000Z";
         }
         if (!("isDir" in $$source)) {
             this["isDir"] = false;

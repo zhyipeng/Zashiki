@@ -7,7 +7,7 @@ function entry(overrides: Partial<FileEntry>): FileEntry {
     name: 'file',
     path: '/tmp/file',
     size: 0,
-    modTime: null,
+    modTime: '',
     isDir: false,
     isHidden: false,
     isSymlink: false,

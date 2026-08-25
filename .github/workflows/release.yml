@@ -10,7 +10,7 @@ permissions:
 
 env:
   APP_NAME: Zashiki
-  WAILS_VERSION: v3.0.0-alpha.97
+  WAILS_VERSION: v3.0.0-beta.12
 
 jobs:
   build:
@@ -23,8 +23,8 @@ jobs:
           - platform: darwin
             os: macos-latest
             artifact-name: zashiki-darwin-universal
-            artifact-file: Zashiki-darwin-universal.zip
-            artifact-path: Zashiki-darwin-universal.zip
+            artifact-file: Zashiki.dmg
+            artifact-path: bin/*.dmg
           - platform: windows
             os: windows-latest
             artifact-name: zashiki-windows-amd64
@@ -78,15 +78,14 @@ jobs:
           choco install nsis -y
           echo "C:\Program Files (x86)\NSIS" >> "$env:GITHUB_PATH"
 
-      # macOS ships a universal .app bundle. A DMG cannot be produced in this
-      # Wails alpha (DMG creation is temporarily disabled), so the packaged app
-      # bundle is the distribution artifact, zipped for download.
-      - name: Build macOS app bundle
+      # macOS now ships a real DMG installer (enabled since v3.0.0). The
+      # package:dmg task builds the universal .app then wraps it in a styled
+      # disk image that users can double-click to install.
+      - name: Build macOS DMG
         if: matrix.platform == 'darwin'
         shell: bash
         run: |
-          task darwin:package:universal
-          ditto -c -k --sequesterRsrc --keepParent "bin/${APP_NAME}.app" "${{ matrix.artifact-file }}"
+          task darwin:package:dmg
 
       # Windows ships an NSIS installer (Zashiki-amd64-installer.exe). The old
       # workflow only uploaded the raw .exe; we now build a real installer.
