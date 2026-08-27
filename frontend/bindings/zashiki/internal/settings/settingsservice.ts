@@ -10,6 +10,14 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
+ * AddToContextMenu adds a Windows Explorer entry that opens selected folders
+ * with the running application.
+ */
+export function AddToContextMenu(): $CancellablePromise<void> {
+    return $Call.ByID(4075713172);
+}
+
+/**
  * AddToPath adds the directory containing the running application to the
  * current user's PATH and updates the process environment immediately.
  */

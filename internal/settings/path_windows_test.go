@@ -34,3 +34,27 @@ func TestEqualWindowsPathEntry(t *testing.T) {
 		})
 	}
 }
+
+func TestContextMenuRegistrations(t *testing.T) {
+	registrations := contextMenuRegistrations()
+	if len(registrations) != 3 {
+		t.Fatalf("expected three context menu registrations, got %d", len(registrations))
+	}
+	if registrations[0].keyPath != `Software\Classes\Directory\shell\Zashiki` || registrations[0].placeholder != "%1" {
+		t.Fatalf("unexpected directory registration: %#v", registrations[0])
+	}
+	if registrations[1].keyPath != `Software\Classes\Directory\Background\shell\Zashiki` || registrations[1].placeholder != "%V" {
+		t.Fatalf("unexpected background registration: %#v", registrations[1])
+	}
+	if registrations[2].keyPath != `Software\Classes\Drive\shell\Zashiki` || registrations[2].placeholder != "%1" {
+		t.Fatalf("unexpected drive registration: %#v", registrations[2])
+	}
+}
+
+func TestContextMenuCommandQuotesExecutableAndArgument(t *testing.T) {
+	got := contextMenuCommand(`C:\Program Files\Zashiki\Zashiki.exe`, "%1")
+	want := `"C:\Program Files\Zashiki\Zashiki.exe" "%1"`
+	if got != want {
+		t.Fatalf("contextMenuCommand() = %q, want %q", got, want)
+	}
+}

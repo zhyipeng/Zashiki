@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { NModal, NRadioButton, NRadioGroup, NSwitch, NInput, NButton } from 'naive-ui'
-import { useMessage } from 'naive-ui'
+import { onMounted, ref } from 'vue'
+import { NModal, NRadioButton, NRadioGroup, NSwitch, NInput, NButton, useMessage } from 'naive-ui'
 import { useSettings } from '../composables/useSettings'
 import type { ThemeMode } from '../composables/useSettings'
-import { Dialogs } from '@wailsio/runtime'
+import { Dialogs, System } from '@wailsio/runtime'
 import { SettingsService } from '../../bindings/zashiki/internal/settings'
 
 defineProps<{
@@ -18,6 +17,12 @@ const emit = defineEmits<{
 const { settings, updateSetting } = useSettings()
 const message = useMessage()
 const addingToPath = ref(false)
+const addingToContextMenu = ref(false)
+const isWindows = ref(false)
+
+onMounted(() => {
+  isWindows.value = System.IsWindows()
+})
 
 const themeOptions: { label: string, value: ThemeMode }[] = [
   { label: '浅色', value: 'light' },
@@ -63,6 +68,21 @@ async function addToPath() {
     message.error(`加入 PATH 失败：${detail}`)
   } finally {
     addingToPath.value = false
+  }
+}
+
+async function addToContextMenu() {
+  if (addingToContextMenu.value) return
+
+  addingToContextMenu.value = true
+  try {
+    await SettingsService.AddToContextMenu()
+    message.success('已加入资源管理器右键菜单')
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    message.error(`加入右键菜单失败：${detail}`)
+  } finally {
+    addingToContextMenu.value = false
   }
 }
 </script>
@@ -120,6 +140,12 @@ async function addToPath() {
       <span class="setting-label">命令行</span>
       <NButton size="small" type="primary" :loading="addingToPath" @click="addToPath">
         加入到 PATH
+      </NButton>
+    </div>
+    <div v-if="isWindows" class="setting-item">
+      <span class="setting-label">右键菜单</span>
+      <NButton size="small" type="primary" :loading="addingToContextMenu" @click="addToContextMenu">
+        加入到右键菜单
       </NButton>
     </div>
   </NModal>

@@ -15,11 +15,14 @@ import (
 var sendMessageTimeout = windows.NewLazySystemDLL("user32.dll").NewProc("SendMessageTimeoutW")
 
 const (
-	hwndBroadcast    = 0xffff
-	wmSettingChange  = 0x001a
-	smtoAbortIfHung  = 0x0002
-	pathChangeWaitMs = 5000
+	hwndBroadcast     = 0xffff
+	wmSettingChange   = 0x001a
+	smtoAbortIfHung   = 0x0002
+	pathChangeWaitMs  = 5000
+	shcneAssocChanged = 0x08000000
 )
+
+var shellChangeNotify = windows.NewLazySystemDLL("shell32.dll").NewProc("SHChangeNotify")
 
 func addPathToUserEnvironment(pathDir string) error {
 	key, _, err := registry.CreateKey(registry.CURRENT_USER, `Environment`, registry.QUERY_VALUE|registry.SET_VALUE)
@@ -74,6 +77,64 @@ func notifyEnvironmentChange() {
 		uintptr(pathChangeWaitMs),
 		0,
 	)
+}
+
+type contextMenuRegistration struct {
+	keyPath     string
+	placeholder string
+}
+
+func addContextMenuForExecutable(executablePath string) error {
+	for _, registration := range contextMenuRegistrations() {
+		if err := writeContextMenuRegistration(registration, executablePath); err != nil {
+			return err
+		}
+	}
+
+	notifyShellAssociationChange()
+	return nil
+}
+
+func contextMenuRegistrations() []contextMenuRegistration {
+	return []contextMenuRegistration{
+		{keyPath: `Software\Classes\Directory\shell\Zashiki`, placeholder: "%1"},
+		{keyPath: `Software\Classes\Directory\Background\shell\Zashiki`, placeholder: "%V"},
+		{keyPath: `Software\Classes\Drive\shell\Zashiki`, placeholder: "%1"},
+	}
+}
+
+func writeContextMenuRegistration(registration contextMenuRegistration, executablePath string) error {
+	key, _, err := registry.CreateKey(registry.CURRENT_USER, registration.keyPath, registry.READ|registry.WRITE)
+	if err != nil {
+		return fmt.Errorf("open context menu registry key: %w", err)
+	}
+	defer key.Close()
+
+	if err := key.SetStringValue("MUIVerb", "用 Zashiki 打开"); err != nil {
+		return fmt.Errorf("write context menu label: %w", err)
+	}
+	if err := key.SetStringValue("Icon", executablePath); err != nil {
+		return fmt.Errorf("write context menu icon: %w", err)
+	}
+
+	commandKey, _, err := registry.CreateKey(key, "command", registry.READ|registry.WRITE)
+	if err != nil {
+		return fmt.Errorf("open context menu command key: %w", err)
+	}
+	defer commandKey.Close()
+
+	if err := commandKey.SetStringValue("", contextMenuCommand(executablePath, registration.placeholder)); err != nil {
+		return fmt.Errorf("write context menu command: %w", err)
+	}
+	return nil
+}
+
+func contextMenuCommand(executablePath, placeholder string) string {
+	return fmt.Sprintf(`"%s" "%s"`, executablePath, placeholder)
+}
+
+func notifyShellAssociationChange() {
+	_, _, _ = shellChangeNotify.Call(uintptr(shcneAssocChanged), 0, 0, 0)
 }
 
 func addPathToProcessEnvironment(pathDir string) error {

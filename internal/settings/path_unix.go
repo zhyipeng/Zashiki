@@ -33,6 +33,10 @@ func addPathToUserEnvironment(pathDir string) error {
 	return addPathToProcessEnvironment(pathDir)
 }
 
+func addContextMenuForExecutable(executablePath string) error {
+	return unsupportedContextMenuError()
+}
+
 func addPathToProcessEnvironment(pathDir string) error {
 	current := os.Getenv("PATH")
 	for _, entry := range strings.Split(current, string(os.PathListSeparator)) {
