@@ -22,7 +22,7 @@ Unicode true
 !define INFO_PROJECTNAME    "Zashiki"
 !define INFO_COMPANYNAME    "Zashiki"
 !define INFO_PRODUCTNAME    "Zashiki"
-!define INFO_PRODUCTVERSION "0.1.0"     # Default "0.1.0"
+!define INFO_PRODUCTVERSION "0.0.10"     # Default "0.0.10"
 !define INFO_COPYRIGHT      "(c) 2025, Zashiki"
 ###
 !define PRODUCT_EXECUTABLE  "Zashiki.exe"
