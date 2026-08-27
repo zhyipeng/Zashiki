@@ -5,9 +5,9 @@ import type { DropdownOption, TreeOption } from 'naive-ui'
 import { DeleteOutlined, FolderOutlined, FolderSpecialOutlined } from '@vicons/material'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { useSettings } from '../composables/useSettings'
-import { FILE_EXPLORER_DRAG_MIME, activeDragPaths, clearDrag, finishDragDrop, hasActiveDragPayload, startFileExplorerDrag } from '../composables/useDragDrop'
+import { FILE_EXPLORER_DRAG_MIME, activeDragPaths, activeDragSourcePanel, clearDrag, finishDragDrop, hasActiveDragPayload, hasActiveNativeDragPayload, startFileExplorerDrag } from '../composables/useDragDrop'
 import { useDirectoryChangeListener } from '../composables/useDirectoryEvents'
-import { openSystemDropConfirm, setSidebarSystemDropHandler } from '../composables/useSystemFileDrop'
+import { isQuickAccessDropTarget, openSystemDropConfirm, setSidebarSystemDropHandler } from '../composables/useSystemFileDrop'
 import type { SystemDropEvent } from '../composables/useSystemFileDrop'
 import { ancestorPaths, baseName, joinPath, pathRoot } from './path'
 
@@ -183,12 +183,13 @@ function onUpdateSelectedKeys(keys: string[]) {
 
 function treeNodeProps({ option }: { option: TreeOption }) {
   const path = typeof option.key === 'string' ? option.key : String(option.key)
+  let dragSessionId = 0
   return {
     draggable: true,
     'data-file-drop-target': true,
     'data-drop-dir': path,
-    onDragstart: (e: DragEvent) => startFileExplorerDrag(e, [path], path),
-    onDragend: () => clearDrag(),
+    onDragstart: (e: DragEvent) => { dragSessionId = startFileExplorerDrag(e, [path], path) },
+    onDragend: () => { clearDrag(dragSessionId); dragSessionId = 0 },
   }
 }
 
@@ -255,9 +256,18 @@ function onQuickAccessDragLeave(e: DragEvent) {
 
 async function onQuickAccessDrop(e: DragEvent) {
   e.preventDefault()
-  e.stopPropagation()
+  // HTML5 内部拖拽由这里消费；系统文件和应用内原生拖拽还需要继续冒泡到
+  // Wails runtime 的全局 drop handler（Windows WebView2 尤其如此）。
+  if (hasActiveDragPayload() && !hasActiveNativeDragPayload()) {
+    e.stopPropagation()
+  }
   rememberDragPoint(e)
   quickAccessDragOver.value = false
+
+  // 原生拖拽回应用由 Wails 的 WindowFilesDropped 处理，避免 Windows
+  // 同时触发这里的 HTML5 drop 导致重复 pin/确认。
+  if (hasActiveNativeDragPayload()) return
+
   const paths = quickAccessDropPaths(e)
   if (paths.length === 0) {
     finishDragDrop()
@@ -321,11 +331,34 @@ function unbindSystemDropListener() {
 }
 
 async function handleSystemDrop(event: SystemDropEvent) {
-  const files = event?.files || []
+  const nativePaths = hasActiveNativeDragPayload() ? activeDragPaths() : []
+  const files = nativePaths.length > 0 ? nativePaths : (event?.files || [])
   if (files.length === 0) return
+
+  if (hasActiveNativeDragPayload()) {
+    // 应用内发起的原生拖拽落到快速访问区时保留原来的 pin 语义。
+    if (isQuickAccessDropTarget(event.details)) {
+      await pinQuickAccessPaths(files)
+      return
+    }
+
+    const dir = systemDropTargetDir(event.details)
+    if (dir && activeDragSourcePanel() !== dir) openSystemDropConfirm(files, dir)
+    finishDragDrop()
+    return
+  }
+
   const dir = systemDropTargetDir(event.details)
-  if (!dir) return
-  openSystemDropConfirm(files, dir)
+  if (dir) {
+    openSystemDropConfirm(files, dir)
+    return
+  }
+
+  // 兼容 Wails 只命中快速访问容器本身的情况，条目目录由坐标补出。
+  if (isQuickAccessDropTarget(event.details)) {
+    const targetDir = quickAccessItemPathAtPoint(event.details?.x || 0, event.details?.y || 0)
+    if (targetDir) openSystemDropConfirm(files, targetDir)
+  }
 }
 
 /** 从落点元素 attributes 解析目标目录（树节点 data-drop-dir）。 */
@@ -461,6 +494,9 @@ function persistPinnedQuickAccess(paths: string[]) {
             class="quick-item"
             :class="{ active: item.path && currentPath === item.path, pinned: item.isPinned }"
             :data-quick-path="item.path || undefined"
+            data-file-drop-target
+            data-quick-access-target="true"
+            :data-drop-dir="item.path || undefined"
             @click="onQuickAccessClick(item)"
             @contextmenu.stop="showQuickAccessContextMenu($event, item)"
           >
@@ -534,6 +570,12 @@ function persistPinnedQuickAccess(paths: string[]) {
   background-color: var(--n-color-selected);
 }
 
+.quick-item.file-drop-target-active {
+  background-color: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.14);
+  outline: 2px solid var(--n-primary-color, #18a058);
+  outline-offset: -2px;
+}
+
 .quick-access {
   height: 100%;
 }
@@ -542,6 +584,18 @@ function persistPinnedQuickAccess(paths: string[]) {
   background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.08);
   outline: 1px dashed var(--n-primary-color, #18a058);
   outline-offset: -3px;
+}
+
+.quick-access.file-drop-target-active {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.08);
+  outline: 1px dashed var(--n-primary-color, #18a058);
+  outline-offset: -3px;
+}
+
+:deep(.n-tree-node-content.file-drop-target-active) {
+  background-color: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.14);
+  outline: 2px solid var(--n-primary-color, #18a058);
+  outline-offset: -2px;
 }
 
 .quick-item.pinned .quick-label {

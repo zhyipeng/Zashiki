@@ -15,6 +15,13 @@ export interface PointerPoint {
 
 export const DRAG_THRESHOLD_PX = 5
 
+/** 当前运行平台是否实现了可跨出窗口的原生文件拖拽。 */
+export function supportsNativeDragOut(): boolean {
+  if (typeof window === 'undefined') return false
+  const os = (window as any)._wails?.environment?.OS
+  return os === 'darwin' || os === 'windows'
+}
+
 /** 指针移动是否超过拖拽阈值（从起点开始的欧氏距离）。 */
 export function hasExceededDragThreshold(start: PointerPoint, current: PointerPoint, threshold = DRAG_THRESHOLD_PX): boolean {
   const dx = current.x - start.x

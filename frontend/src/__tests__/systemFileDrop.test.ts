@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   hasSidebarDropTarget,
+  isQuickAccessDropTarget,
   sidebarTargetDir,
   panelIdFromPoint,
   resolveTargetPanel,
+  targetDirFromDropDetails,
 } from '../composables/useSystemFileDrop'
 
 describe('sidebarTargetDir', () => {
@@ -32,6 +34,35 @@ describe('hasSidebarDropTarget', () => {
   it('无属性或空属性不是侧边栏落点', () => {
     expect(hasSidebarDropTarget({ x: 0, y: 0 })).toBe(false)
     expect(hasSidebarDropTarget(null)).toBe(false)
+  })
+})
+
+describe('isQuickAccessDropTarget', () => {
+  it('识别快速访问区域本身', () => {
+    expect(isQuickAccessDropTarget({ x: 0, y: 0, attributes: { 'data-drop-dir': '__quick_access__' } })).toBe(true)
+  })
+
+  it('识别快速访问条目', () => {
+    expect(isQuickAccessDropTarget({ x: 0, y: 0, attributes: { 'data-quick-access-target': 'true' } })).toBe(true)
+  })
+
+  it('普通目录落点不是快速访问目标', () => {
+    expect(isQuickAccessDropTarget({ x: 0, y: 0, attributes: { 'data-drop-dir': '/tmp/docs' } })).toBe(false)
+    expect(isQuickAccessDropTarget(undefined)).toBe(false)
+  })
+})
+
+describe('targetDirFromDropDetails', () => {
+  it('目录行属性优先于面板当前目录', () => {
+    expect(targetDirFromDropDetails(
+      { x: 0, y: 0, attributes: { 'data-folder-path': '/tmp/target' } },
+      '/tmp/panel',
+    )).toBe('/tmp/target')
+  })
+
+  it('未命中目录行时回退面板当前目录', () => {
+    expect(targetDirFromDropDetails({ x: 0, y: 0, attributes: {} }, '/tmp/panel')).toBe('/tmp/panel')
+    expect(targetDirFromDropDetails(undefined, '/tmp/panel')).toBe('/tmp/panel')
   })
 })
 

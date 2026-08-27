@@ -20,7 +20,8 @@
 - [x] 默认终端、编辑器
 - [x] 快速访问自定义
 - [x] 状态栏
-
+- [ ] 命令行参数
+- [ ] windows 右键菜单
 
 ### p2 - 没那么重要的
   - [ ] 自定义快捷键
@@ -33,6 +34,7 @@
       - [x] darwin：prepare + LeftMouseDragged monitor + beginDraggingSession
       - [x] windows：SHCreateDataObject + SHDoDragDrop（OLE STA 线程）
       - [ ] linux：GTK 拖出（暂无系统级方案，保留能力点）
+  - [ ] 文件传输
 
 ### p3 - 暂时没想到解决方案
   - [x] FileTable 空白区域

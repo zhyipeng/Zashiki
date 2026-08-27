@@ -15,9 +15,9 @@ import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/fil
 import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined, SearchOutlined, UndoSharp, RedoSharp } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
-import { useDragDrop } from '../composables/useDragDrop'
+import { clearDrag, startNativeFileExplorerDrag, useDragDrop } from '../composables/useDragDrop'
 import { useSystemFileDrop } from '../composables/useSystemFileDrop'
-import { createNativeDragOut } from '../composables/nativeDragOut'
+import { createNativeDragOut, supportsNativeDragOut } from '../composables/nativeDragOut'
 import { useFileClipboard } from '../composables/useFileClipboard'
 import type { ClipboardMode } from '../composables/clipboardState'
 import { formatShortcutBinding, useKeyboardShortcuts } from '../composables/useKeyboardShortcuts'
@@ -136,6 +136,7 @@ const directoryEventToken = useDirectoryEvents(() => props.path, () => {
 const {
   isDragOver, dragLabel, hoveredFolderPath,
   pendingDrop, confirmDrop, cancelDrop,
+  onRowDragStart, onRowDragEnd,
   onDragOver, onDragEnter, onDragLeave, onDrop,
 } = useDragDrop(() => props.path, {
   onOperationComplete: (action, results) => {
@@ -171,10 +172,11 @@ const showConfirm = ref(false)
 watch(pendingDrop, (val) => { showConfirm.value = !!val })
 
 // ---- 原生拖出（Wails → 系统 Finder/Explorer）----
-// 不用 HTML draggable：pointer 阈值检测 + FileTransferService.StartDrag。
+// macOS/Windows 使用原生拖拽；Linux 和浏览器预览保留 HTML5 内部拖拽回退。
 const nativeDragOut = createNativeDragOut({
   onDragStart: async (paths, point) => {
     if (paths.length === 0) return
+    const nativeDragSessionId = startNativeFileExplorerDrag(paths, props.path)
     try {
       const effect = await FileTransferService.StartDrag(paths, Math.round(point.x), Math.round(point.y))
       // 若最终为 move（用户按住修饰键/目标为移动），源文件可能已消失，刷新当前目录
@@ -183,9 +185,15 @@ const nativeDragOut = createNativeDragOut({
       }
     } catch (err) {
       console.error('Native drag out failed:', err)
+    } finally {
+      // WindowFilesDropped 可能在 StartDrag 返回前后到达，延迟清理以便
+      // 系统 drop handler 能识别这是应用内发起的原生拖拽。
+      clearDrag(nativeDragSessionId)
     }
   },
 })
+
+const nativeDragOutSupported = supportsNativeDragOut()
 
 // 拖拽开始时快照路径（与选中状态一致；parent 行不可拖拽）
 function nativeDragPathsForRow(row: FileEntry): string[] {
@@ -2006,14 +2014,18 @@ useKeyboardShortcuts(() => shortcutActions, {
             findModeActive && !isFindModeMatchedEntry(row) ? 'find-mode-unmatched-entry' : '',
           ].filter(Boolean).join(' '),
           'data-folder-path': row.isDir && !isParentEntry(row) ? row.path : undefined,
-          onPointerdown: (e: PointerEvent) => {
+          'data-file-drop-target': row.isDir && !isParentEntry(row) ? true : undefined,
+          draggable: !isParentEntry(row) && !nativeDragOutSupported,
+          onDragstart: !nativeDragOutSupported ? (e: DragEvent) => onRowDragStart(e, row, nativeDragPathsForRow(row)) : undefined,
+          onDragend: !nativeDragOutSupported ? onRowDragEnd : undefined,
+          onPointerdown: nativeDragOutSupported ? (e: PointerEvent) => {
             nativeDragOut.onPointerDown({ x: e.clientX, y: e.clientY }, nativeDragPathsForRow(row))
-          },
-          onPointermove: (e: PointerEvent) => {
+          } : undefined,
+          onPointermove: nativeDragOutSupported ? (e: PointerEvent) => {
             nativeDragOut.onPointerMove({ x: e.clientX, y: e.clientY })
-          },
-          onPointerup: () => nativeDragOut.onPointerUp(),
-          onPointercancel: () => nativeDragOut.onPointerUp(),
+          } : undefined,
+          onPointerup: nativeDragOutSupported ? () => nativeDragOut.onPointerUp() : undefined,
+          onPointercancel: nativeDragOutSupported ? () => nativeDragOut.onPointerUp() : undefined,
           onClick: (e: MouseEvent) => onRowClick(e, row),
           onDblclick: () => onRowDblclick(row),
           onContextmenu: (e: MouseEvent) => onRowContextMenu(e, row),
@@ -2361,6 +2373,18 @@ useKeyboardShortcuts(() => shortcutActions, {
   outline: 2px solid var(--n-primary-color, #18a058);
   outline-offset: -2px;
   background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.1) !important;
+}
+
+:deep(tr.file-drop-target-active) {
+  outline: 2px solid var(--n-primary-color, #18a058);
+  outline-offset: -2px;
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.1) !important;
+}
+
+.table-area.file-drop-target-active {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.04);
+  outline: 2px dashed var(--n-primary-color, #18a058);
+  outline-offset: -2px;
 }
 
 :deep(tr.selected-entry td) {

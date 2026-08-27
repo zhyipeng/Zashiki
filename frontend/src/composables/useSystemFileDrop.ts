@@ -3,6 +3,7 @@ import { Events } from '@wailsio/runtime'
 import type { CancellablePromise } from '@wailsio/runtime'
 import type { EntryOperationResult } from '../../bindings/zashiki/internal/filemanager'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
+import { activeDragPaths, activeDragSourcePanel, finishDragDrop, hasActiveNativeDragPayload } from './useDragDrop'
 import { notifyDirectoriesChanged } from './useDirectoryEvents'
 import { isOperationCancelledError, trackOperationPromise } from './useOperationProgress'
 
@@ -74,6 +75,17 @@ export function sidebarTargetDir(details: SystemDropEvent['details']): string {
   return dir
 }
 
+/** 判断落点是否是快速访问区域（区域本身或某个快速访问条目）。 */
+export function isQuickAccessDropTarget(details: SystemDropEvent['details']): boolean {
+  const attrs = details?.attributes
+  return attrs?.['data-drop-dir'] === '__quick_access__' || attrs?.['data-quick-access-target'] === 'true'
+}
+
+/** 从文件表格落点属性解析目录；未命中目录行时回退到面板当前目录。 */
+export function targetDirFromDropDetails(details: SystemDropEvent['details'], panelDir: string): string {
+  return details?.attributes?.['data-folder-path'] || panelDir
+}
+
 /** 从落点坐标解析目标 panel id：找落点元素最近的 [data-panel-id]。返回 0 表示无法识别。 */
 export function panelIdFromPoint(x: number, y: number): number {
   if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') return 0
@@ -94,21 +106,30 @@ function bindGlobal() {
 }
 
 function handleSystemDrop(event: SystemDropEvent) {
-  const files = event?.files || []
+  const nativePaths = hasActiveNativeDragPayload() ? activeDragPaths() : []
+  const files = nativePaths.length > 0 ? nativePaths : (event?.files || [])
   if (files.length === 0) return
+
+  const normalizedEvent = nativePaths.length > 0 ? { ...event, files } : event
 
   // 侧边栏落点（树节点/快速访问）由 Sidebar 注册的 handler 处理
   if (hasSidebarDropTarget(event.details)) {
-    sidebarHandler?.(event)
+    sidebarHandler?.(normalizedEvent)
     return
   }
 
   // 面板落点：坐标解析出目标 panel；解析不到则回退当前激活面板
   const targetPanelId = resolveTargetPanel(event.details)
-  const dir = panels.get(targetPanelId)?.currentDir()
+  const panelDir = panels.get(targetPanelId)?.currentDir() || ''
+  const dir = targetDirFromDropDetails(event.details, panelDir)
   if (!dir) return
+  if (hasActiveNativeDragPayload() && activeDragSourcePanel() === dir) {
+    finishDragDrop()
+    return
+  }
   if (pendingSystemDrop.value) return // 已有待确认拖入，忽略新事件
   pendingSystemDrop.value = { paths: files, targetDir: dir, panelId: targetPanelId }
+  if (hasActiveNativeDragPayload()) finishDragDrop()
 }
 
 /** 从事件 details 解析目标 panel：优先坐标命中，回退当前激活面板。可注入坐标解析便于测试。 */

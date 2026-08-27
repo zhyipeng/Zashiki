@@ -10,6 +10,8 @@ export const FILE_EXPLORER_DRAG_MIME = 'application/x-file-explorer-paths'
 interface DragPayload {
   paths: string[]
   sourcePanel: string
+  kind: 'html5' | 'native'
+  sessionId: number
 }
 
 interface PendingDrop {
@@ -28,6 +30,7 @@ const hoveredFolderPath = ref('')
 const pendingDrop = ref<PendingDrop | null>(null)
 const dragOverRefs = new Set<{ value: boolean }>()
 let dragCleanupTimer: number | null = null
+let nextDragSessionId = 1
 
 function dragCleanup() {
   if (dragCleanupTimer !== null) {
@@ -41,8 +44,10 @@ function dragCleanup() {
   }
 }
 
-export function clearDrag() {
-  scheduleDragCleanup()
+export function clearDrag(sessionId?: number) {
+  if (!dragPayload.value) return
+  if (sessionId !== undefined && dragPayload.value.sessionId !== sessionId) return
+  scheduleDragCleanup(dragPayload.value.sessionId)
 }
 
 export function finishDragDrop() {
@@ -57,11 +62,23 @@ export function hasActiveDragPayload(): boolean {
   return !!dragPayload.value
 }
 
-export function startFileExplorerDrag(e: DragEvent, paths: string[], sourcePanel = '') {
-  if (paths.length === 0 || !e.dataTransfer) return
+export function hasActiveNativeDragPayload(): boolean {
+  return dragPayload.value?.kind === 'native'
+}
+
+export function activeDragSourcePanel(): string {
+  return dragPayload.value?.sourcePanel || ''
+}
+
+export function startFileExplorerDrag(e: DragEvent, paths: string[], sourcePanel = ''): number {
+  if (paths.length === 0 || !e.dataTransfer) return 0
+  cancelScheduledDragCleanup()
+  const sessionId = nextDragSessionId++
   const payload: DragPayload = {
     paths,
     sourcePanel,
+    kind: 'html5',
+    sessionId,
   }
   dragPayload.value = payload
   hoveredFolderPath.value = ''
@@ -69,13 +86,35 @@ export function startFileExplorerDrag(e: DragEvent, paths: string[], sourcePanel
   e.dataTransfer.setData(FILE_EXPLORER_DRAG_MIME, serialized)
   e.dataTransfer.setData('text/plain', serialized)
   e.dataTransfer.effectAllowed = 'all'
+  return sessionId
 }
 
-function scheduleDragCleanup() {
+export function startNativeFileExplorerDrag(paths: string[], sourcePanel = ''): number {
+  if (paths.length === 0) return 0
+  cancelScheduledDragCleanup()
+  const sessionId = nextDragSessionId++
+  dragPayload.value = {
+    paths,
+    sourcePanel,
+    kind: 'native',
+    sessionId,
+  }
+  hoveredFolderPath.value = ''
+  return sessionId
+}
+
+function cancelScheduledDragCleanup() {
   if (dragCleanupTimer !== null) {
     window.clearTimeout(dragCleanupTimer)
+    dragCleanupTimer = null
   }
+}
+
+function scheduleDragCleanup(sessionId: number) {
+  cancelScheduledDragCleanup()
   dragCleanupTimer = window.setTimeout(() => {
+    dragCleanupTimer = null
+    if (dragPayload.value?.sessionId !== sessionId) return
     dragCleanup()
   }, 800)
 }
@@ -90,14 +129,25 @@ export function useDragDrop(currentPath: () => string, options: DragDropOptions 
 
   // ---- drag source ----
 
+  let rowDragSessionId = 0
+
   function onRowDragStart(e: DragEvent, entry: FileEntry, paths?: string[]) {
-    startFileExplorerDrag(e, paths && paths.length > 0 ? paths : [entry.path], currentPath())
+    rowDragSessionId = startFileExplorerDrag(e, paths && paths.length > 0 ? paths : [entry.path], currentPath())
+  }
+
+  function onRowDragEnd() {
+    clearDrag(rowDragSessionId)
+    rowDragSessionId = 0
   }
 
   // ---- helpers ----
 
   function isValidDrop(e: DragEvent): boolean {
-    return !!(dragPayload.value) || e.dataTransfer!.types.includes('Files')
+    // Native app drags are delivered back through Wails' WindowFilesDropped
+    // event. Letting this HTML5 handler process them as well would open two
+    // confirmation flows on Windows/WebView2.
+    if (hasActiveNativeDragPayload()) return false
+    return !!(dragPayload.value) || !!e.dataTransfer?.types.includes(FILE_EXPLORER_DRAG_MIME) || !!e.dataTransfer?.types.includes('Files')
   }
 
   function targetFromEvent(e: DragEvent): string {
@@ -133,6 +183,7 @@ export function useDragDrop(currentPath: () => string, options: DragDropOptions 
   // ---- drop ----
 
   async function _onDrop(e: DragEvent) {
+    if (!isValidDrop(e)) return
     isDragOver.value = false
     hoveredFolderPath.value = ''
     await prepareDrop(targetFromEvent(e), e)
@@ -235,6 +286,7 @@ export function useDragDrop(currentPath: () => string, options: DragDropOptions 
     hoveredFolderPath,
     pendingDrop,
     onRowDragStart,
+    onRowDragEnd,
     confirmDrop,
     cancelDrop,
     onDragOver: _onDragOver,

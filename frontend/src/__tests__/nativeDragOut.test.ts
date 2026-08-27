@@ -1,5 +1,27 @@
-import { describe, expect, it, vi } from 'vitest'
-import { createNativeDragOut, hasExceededDragThreshold } from '../composables/nativeDragOut'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createNativeDragOut, hasExceededDragThreshold, supportsNativeDragOut } from '../composables/nativeDragOut'
+
+const originalWails = (window as any)._wails
+
+afterEach(() => {
+  ;(window as any)._wails = originalWails
+})
+
+describe('supportsNativeDragOut', () => {
+  it('macOS 和 Windows 支持原生拖出', () => {
+    for (const os of ['darwin', 'windows']) {
+      ;(window as any)._wails = { environment: { OS: os } }
+      expect(supportsNativeDragOut()).toBe(true)
+    }
+  })
+
+  it('Linux 和浏览器预览回退到 HTML5 拖拽', () => {
+    for (const os of ['linux', undefined]) {
+      ;(window as any)._wails = os ? { environment: { OS: os } } : undefined
+      expect(supportsNativeDragOut()).toBe(false)
+    }
+  })
+})
 
 describe('hasExceededDragThreshold', () => {
   it('刚好等于阈值视为越过', () => {
