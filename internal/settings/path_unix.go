@@ -11,11 +11,21 @@ import (
 )
 
 const zashikiPathMarker = "# Added by Zashiki"
+const zashikiPathLauncherName = "zashiki"
 
-func addPathToUserEnvironment(pathDir string) error {
+func addPathToUserEnvironment(executablePath string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("resolve user home directory: %w", err)
+	}
+
+	launcherDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(launcherDir, 0o755); err != nil {
+		return fmt.Errorf("create PATH launcher directory: %w", err)
+	}
+	launcherPath := filepath.Join(launcherDir, zashikiPathLauncherName)
+	if err := writeUnixPathLauncher(launcherPath, executablePath); err != nil {
+		return err
 	}
 
 	shell := os.Getenv("SHELL")
@@ -26,11 +36,11 @@ func addPathToUserEnvironment(pathDir string) error {
 		}
 	}
 
-	if err := addPathEntryToShellConfig(configPath, pathDir, shell); err != nil {
+	if err := addPathEntryToShellConfig(configPath, launcherDir, shell); err != nil {
 		return err
 	}
 
-	return addPathToProcessEnvironment(pathDir)
+	return addPathToProcessEnvironment(launcherDir)
 }
 
 func addContextMenuForExecutable(executablePath string) error {
@@ -38,17 +48,32 @@ func addContextMenuForExecutable(executablePath string) error {
 }
 
 func addPathToProcessEnvironment(pathDir string) error {
-	current := os.Getenv("PATH")
-	for _, entry := range strings.Split(current, string(os.PathListSeparator)) {
-		if equalPathEntry(entry, pathDir) {
-			return nil
+	entries := make([]string, 0)
+	for _, entry := range strings.Split(os.Getenv("PATH"), string(os.PathListSeparator)) {
+		if entry != "" && !equalPathEntry(entry, pathDir) {
+			entries = append(entries, entry)
 		}
 	}
 
-	if current == "" {
-		return os.Setenv("PATH", pathDir)
+	return os.Setenv("PATH", strings.Join(append([]string{pathDir}, entries...), string(os.PathListSeparator)))
+}
+
+func writeUnixPathLauncher(launcherPath, executablePath string) error {
+	if strings.TrimSpace(executablePath) == "" {
+		return fmt.Errorf("resolve current executable path")
 	}
-	return os.Setenv("PATH", current+string(os.PathListSeparator)+pathDir)
+
+	if err := os.WriteFile(launcherPath, []byte(unixPathLauncherContent(executablePath)), 0o755); err != nil {
+		return fmt.Errorf("write PATH launcher: %w", err)
+	}
+	if err := os.Chmod(launcherPath, 0o755); err != nil {
+		return fmt.Errorf("make PATH launcher executable: %w", err)
+	}
+	return nil
+}
+
+func unixPathLauncherContent(executablePath string) string {
+	return "#!/bin/sh\nnohup " + shellSingleQuote(executablePath) + " \"$@\" </dev/null >/dev/null 2>&1 &\n"
 }
 
 func equalPathEntry(left, right string) bool {

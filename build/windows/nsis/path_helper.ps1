@@ -1,16 +1,18 @@
-# Adds or removes the current installer directory from the *user* PATH.
+# Adds or removes the detached launcher directory from the *user* PATH.
 # Keeps all other entries untouched (including %VAR% style entries).
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File path_helper.ps1 -Operation add -PathDir "..."
-#   powershell -ExecutionPolicy Bypass -File path_helper.ps1 -Operation remove -PathDir "..."
+#   powershell -ExecutionPolicy Bypass -File path_helper.ps1 -Operation add -PathDir "..." [-LegacyPathDir "..."]
+#   powershell -ExecutionPolicy Bypass -File path_helper.ps1 -Operation remove -PathDir "..." [-LegacyPathDir "..."]
 param(
     [ValidateSet('add', 'remove')]
     [Parameter(Mandatory = $true)]
     [string]$Operation,
 
     [Parameter(Mandatory = $true)]
-    [string]$PathDir
+    [string]$PathDir,
+
+    [string]$LegacyPathDir = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,22 +20,27 @@ $ErrorActionPreference = 'Stop'
 if (-not [string]::IsNullOrWhiteSpace($PathDir)) {
     $PathDir = $PathDir.Trim().TrimEnd('\')
 }
+if (-not [string]::IsNullOrWhiteSpace($LegacyPathDir)) {
+    $LegacyPathDir = $LegacyPathDir.Trim().TrimEnd('\')
+}
 if ([string]::IsNullOrWhiteSpace($PathDir)) {
     throw 'PathDir is required.'
 }
 
+$managedDirs = @($PathDir, $LegacyPathDir) |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-$parts = @($userPath -split ';' | Where-Object { $_ -ne '' })
-$alreadyPresent = @($parts | Where-Object { $_.TrimEnd('\') -eq $PathDir }).Count -gt 0
-$parts = @($parts | Where-Object { $_.TrimEnd('\') -ne $PathDir })
+$parts = @(
+    $userPath -split ';' |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $managedDirs -notcontains $_.TrimEnd('\') }
+)
 
 switch ($Operation) {
     'add' {
-        if ($alreadyPresent) {
-            Write-Host "$PathDir already on user PATH."
-            return
-        }
-        [Environment]::SetEnvironmentVariable('Path', (($parts + $PathDir) -join ';'), 'User')
+        [Environment]::SetEnvironmentVariable('Path', ((@($PathDir) + $parts) -join ';'), 'User')
         Write-Host "Added $PathDir to user PATH."
     }
     'remove' {

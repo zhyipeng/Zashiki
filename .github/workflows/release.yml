@@ -88,9 +88,9 @@ jobs:
           task darwin:package:dmg
 
       # Windows ships a per-user NSIS installer (Zashiki-amd64-installer.exe).
-      # It installs under %LOCALAPPDATA% without a UAC prompt, and writes the
-      # install dir into the user PATH on install (removed again on uninstall), so
-      # `zashiki` is available from a new terminal.
+      # It installs under %LOCALAPPDATA% without a UAC prompt, and adds a detached
+      # launcher to the user PATH (removed again on uninstall), so `zashiki` is
+      # available from a new terminal without holding it open.
       - name: Build Windows NSIS installer
         if: matrix.platform == 'windows'
         shell: bash

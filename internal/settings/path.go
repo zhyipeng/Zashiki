@@ -6,18 +6,18 @@ import (
 	"path/filepath"
 )
 
-// AddToPath adds the directory containing the running application to the
-// current user's PATH and updates the process environment immediately.
+// AddToPath adds the running application to the current user's PATH and
+// updates the process environment immediately.
 func (s *SettingsService) AddToPath() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	executableDir, err := currentExecutableDir()
+	executable, err := currentExecutablePath()
 	if err != nil {
 		return err
 	}
 
-	return addPathToUserEnvironment(executableDir)
+	return addPathToUserEnvironment(executable)
 }
 
 func currentExecutablePath() (string, error) {
@@ -30,17 +30,4 @@ func currentExecutablePath() (string, error) {
 		executable = resolved
 	}
 	return executable, nil
-}
-
-func currentExecutableDir() (string, error) {
-	executable, err := currentExecutablePath()
-	if err != nil {
-		return "", err
-	}
-
-	executableDir := filepath.Dir(executable)
-	if executableDir == "." || executableDir == "" {
-		return "", fmt.Errorf("resolve current executable directory")
-	}
-	return executableDir, nil
 }

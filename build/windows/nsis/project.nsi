@@ -22,7 +22,7 @@ Unicode true
 !define INFO_PROJECTNAME    "Zashiki"
 !define INFO_COMPANYNAME    "Zashiki"
 !define INFO_PRODUCTNAME    "Zashiki"
-!define INFO_PRODUCTVERSION "0.0.10"     # Default "0.0.10"
+!define INFO_PRODUCTVERSION "0.0.11"     # Default "0.0.11"
 !define INFO_COPYRIGHT      "(c) 2025, Zashiki"
 ###
 !define PRODUCT_EXECUTABLE  "Zashiki.exe"
@@ -90,10 +90,15 @@ Section
     !insertmacro wails.webview2runtime
 
     SetOutPath $INSTDIR
-    
+
     !insertmacro wails.files
 
     File "path_helper.ps1"
+
+    CreateDirectory "$INSTDIR\bin"
+    SetOutPath "$INSTDIR\bin"
+    File "zashiki.cmd"
+    SetOutPath "$INSTDIR"
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -101,7 +106,7 @@ Section
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
 
-    ExecWait '"powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\path_helper.ps1" -Operation add -PathDir "$INSTDIR"'
+    ExecWait '"powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\path_helper.ps1" -Operation add -PathDir "$INSTDIR\bin" -LegacyPathDir "$INSTDIR"'
     
     !insertmacro wails.writeUninstaller
 SectionEnd
@@ -109,7 +114,7 @@ SectionEnd
 Section "uninstall" 
     !insertmacro wails.setShellContext
 
-    ExecWait '"powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\path_helper.ps1" -Operation remove -PathDir "$INSTDIR"'
+    ExecWait '"powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\path_helper.ps1" -Operation remove -PathDir "$INSTDIR\bin" -LegacyPathDir "$INSTDIR"'
 
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
 

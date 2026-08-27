@@ -97,3 +97,18 @@ func TestAddPathToProcessEnvironmentIsIdempotent(t *testing.T) {
 		t.Fatalf("expected one process PATH entry, got %d in %q", got, first)
 	}
 }
+
+func TestUnixPathLauncherContent(t *testing.T) {
+	got := unixPathLauncherContent("/Applications/Zashiki.app/Contents/MacOS/Zashiki")
+	want := "#!/bin/sh\nnohup '/Applications/Zashiki.app/Contents/MacOS/Zashiki' \"$@\" </dev/null >/dev/null 2>&1 &\n"
+	if got != want {
+		t.Fatalf("unixPathLauncherContent() = %q, want %q", got, want)
+	}
+}
+
+func TestUnixPathLauncherContentQuotesSingleQuotes(t *testing.T) {
+	got := unixPathLauncherContent("/Applications/O'Reilly/Zashiki")
+	if !strings.Contains(got, `'/Applications/O'"'"'Reilly/Zashiki'`) {
+		t.Fatalf("expected single quotes to be shell-escaped: %q", got)
+	}
+}

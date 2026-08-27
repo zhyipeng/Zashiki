@@ -3,9 +3,12 @@
 package settings
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"unicode/utf16"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -24,7 +27,74 @@ const (
 
 var shellChangeNotify = windows.NewLazySystemDLL("shell32.dll").NewProc("SHChangeNotify")
 
-func addPathToUserEnvironment(pathDir string) error {
+const windowsPathLauncherName = "zashiki.cmd"
+
+func addPathToUserEnvironment(executablePath string) error {
+	if launcherDir, ok := installedWindowsPathLauncherDir(executablePath); ok {
+		return addWindowsPathEntry(launcherDir)
+	}
+
+	launcherDir, err := windowsPathLauncherDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(launcherDir, 0o755); err != nil {
+		return fmt.Errorf("create PATH launcher directory: %w", err)
+	}
+
+	launcherPath := filepath.Join(launcherDir, windowsPathLauncherName)
+	if err := writeWindowsPathLauncher(launcherPath, executablePath); err != nil {
+		return err
+	}
+
+	return addWindowsPathEntry(launcherDir)
+}
+
+func installedWindowsPathLauncherDir(executablePath string) (string, bool) {
+	executableDir := filepath.Dir(executablePath)
+	if executableDir == "." || executableDir == "" {
+		return "", false
+	}
+
+	launcherDir := filepath.Join(executableDir, "bin")
+	info, err := os.Stat(filepath.Join(launcherDir, windowsPathLauncherName))
+	if err != nil || info.IsDir() {
+		return "", false
+	}
+	return launcherDir, true
+}
+
+func windowsPathLauncherDir() (string, error) {
+	localAppData := strings.TrimSpace(os.Getenv("LOCALAPPDATA"))
+	if localAppData == "" {
+		return "", fmt.Errorf("resolve LOCALAPPDATA")
+	}
+	return filepath.Join(localAppData, "zashiki", "launcher"), nil
+}
+
+func writeWindowsPathLauncher(launcherPath, executablePath string) error {
+	if strings.TrimSpace(executablePath) == "" {
+		return fmt.Errorf("resolve current executable path")
+	}
+
+	content := windowsPathLauncherContent(executablePath)
+	utf16Content := utf16.Encode([]rune("\ufeff" + content))
+	data := make([]byte, len(utf16Content)*2)
+	for i, value := range utf16Content {
+		binary.LittleEndian.PutUint16(data[i*2:], value)
+	}
+	if err := os.WriteFile(launcherPath, data, 0o644); err != nil {
+		return fmt.Errorf("write PATH launcher: %w", err)
+	}
+	return nil
+}
+
+func windowsPathLauncherContent(executablePath string) string {
+	quotedPath := strings.ReplaceAll(executablePath, "%", "%%")
+	return fmt.Sprintf("@echo off\r\nstart \"\" /B \"%s\" %%*\r\n", quotedPath)
+}
+
+func addWindowsPathEntry(pathDir string) error {
 	key, _, err := registry.CreateKey(registry.CURRENT_USER, `Environment`, registry.QUERY_VALUE|registry.SET_VALUE)
 	if err != nil {
 		return fmt.Errorf("open user environment registry key: %w", err)
@@ -40,15 +110,7 @@ func addPathToUserEnvironment(pathDir string) error {
 		valueType = registry.SZ
 	}
 
-	entries := splitWindowsPath(current)
-	for _, entry := range entries {
-		if equalWindowsPathEntry(entry, pathDir) {
-			notifyEnvironmentChange()
-			return addPathToProcessEnvironment(pathDir)
-		}
-	}
-	entries = append(entries, pathDir)
-	updated := strings.Join(entries, ";")
+	updated := prependWindowsPathEntry(current, pathDir)
 
 	if valueType == registry.EXPAND_SZ {
 		if err := key.SetExpandStringValue("Path", updated); err != nil {
@@ -138,17 +200,18 @@ func notifyShellAssociationChange() {
 }
 
 func addPathToProcessEnvironment(pathDir string) error {
-	current := os.Getenv("PATH")
-	for _, entry := range splitWindowsPath(current) {
-		if equalWindowsPathEntry(entry, pathDir) {
-			return nil
+	return os.Setenv("PATH", prependWindowsPathEntry(os.Getenv("PATH"), pathDir))
+}
+
+func prependWindowsPathEntry(current, pathDir string) string {
+	entries := splitWindowsPath(current)
+	filtered := make([]string, 0, len(entries)+1)
+	for _, entry := range entries {
+		if !equalWindowsPathEntry(entry, pathDir) {
+			filtered = append(filtered, entry)
 		}
 	}
-
-	if current == "" {
-		return os.Setenv("PATH", pathDir)
-	}
-	return os.Setenv("PATH", current+";"+pathDir)
+	return strings.Join(append([]string{pathDir}, filtered...), ";")
 }
 
 func splitWindowsPath(value string) []string {

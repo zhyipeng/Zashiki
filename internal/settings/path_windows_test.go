@@ -3,7 +3,10 @@
 package settings
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -32,6 +35,49 @@ func TestEqualWindowsPathEntry(t *testing.T) {
 				t.Fatalf("equalWindowsPathEntry(%q, %q) = %v, want %v", tc.left, tc.right, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestPrependWindowsPathEntry(t *testing.T) {
+	got := prependWindowsPathEntry(`C:\Windows;C:\Tools;C:\Windows\`, `c:\windows`)
+	want := `c:\windows;C:\Tools`
+	if got != want {
+		t.Fatalf("prependWindowsPathEntry() = %q, want %q", got, want)
+	}
+}
+
+func TestWindowsPathLauncherContent(t *testing.T) {
+	got := windowsPathLauncherContent(`C:\Program Files\Zashiki\Zashiki.exe`)
+	want := "@echo off\r\nstart \"\" /B \"C:\\Program Files\\Zashiki\\Zashiki.exe\" %*\r\n"
+	if got != want {
+		t.Fatalf("windowsPathLauncherContent() = %q, want %q", got, want)
+	}
+}
+
+func TestWindowsPathLauncherContentEscapesPercentSigns(t *testing.T) {
+	got := windowsPathLauncherContent(`C:\Users\100%\Zashiki.exe`)
+	if !strings.Contains(got, `C:\Users\100%%\Zashiki.exe`) {
+		t.Fatalf("expected percent signs to be escaped in launcher content: %q", got)
+	}
+}
+
+func TestInstalledWindowsPathLauncherDir(t *testing.T) {
+	root := t.TempDir()
+	launcherDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(launcherDir, 0o755); err != nil {
+		t.Fatalf("create launcher directory: %v", err)
+	}
+	launcherPath := filepath.Join(launcherDir, windowsPathLauncherName)
+	if err := os.WriteFile(launcherPath, []byte("launcher"), 0o644); err != nil {
+		t.Fatalf("write launcher: %v", err)
+	}
+
+	got, ok := installedWindowsPathLauncherDir(filepath.Join(root, "Zashiki.exe"))
+	if !ok {
+		t.Fatal("expected installed launcher to be detected")
+	}
+	if got != launcherDir {
+		t.Fatalf("installedWindowsPathLauncherDir() = %q, want %q", got, launcherDir)
 	}
 }
 

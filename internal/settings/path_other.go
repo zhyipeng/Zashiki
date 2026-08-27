@@ -4,7 +4,7 @@ package settings
 
 import "fmt"
 
-func addPathToUserEnvironment(pathDir string) error {
+func addPathToUserEnvironment(executablePath string) error {
 	return fmt.Errorf("adding the application to PATH is not supported on this platform")
 }
 

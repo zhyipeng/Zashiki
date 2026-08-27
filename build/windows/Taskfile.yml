@@ -167,12 +167,11 @@ tasks:
   install:
     summary: Installs zashiki into the user PATH (no admin needed)
     desc: |
-      Copies the built GUI .exe to %LOCALAPPDATA%\zashiki\bin and adds that dir to
-      the *user* PATH if it is not already present. The PowerShell logic lives in
+      Copies the built GUI .exe to %LOCALAPPDATA%\zashiki\app and adds a detached
+      launcher in %LOCALAPPDATA%\zashiki\launcher to the *user* PATH. The PowerShell logic lives in
       build/windows/install.ps1 and is invoked with `powershell -File`, because go-task
       runs command strings through a POSIX sh interpreter that would mangle inline
-      PowerShell. The .exe itself launches detached via the windowsgui subsystem, so no
-      wrapper is needed.
+      PowerShell. The launcher uses `start /B` so the terminal returns immediately.
     deps:
       - task: build
     cmds:
