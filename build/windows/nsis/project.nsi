@@ -93,17 +93,23 @@ Section
     
     !insertmacro wails.files
 
+    File "path_helper.ps1"
+
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
+
+    ExecWait '"powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\path_helper.ps1" -Operation add -PathDir "$INSTDIR"'
     
     !insertmacro wails.writeUninstaller
 SectionEnd
 
 Section "uninstall" 
     !insertmacro wails.setShellContext
+
+    ExecWait '"powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\path_helper.ps1" -Operation remove -PathDir "$INSTDIR"'
 
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
 
