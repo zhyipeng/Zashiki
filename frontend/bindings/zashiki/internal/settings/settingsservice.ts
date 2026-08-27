@@ -9,6 +9,14 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+/**
+ * AddToPath adds the directory containing the running application to the
+ * current user's PATH and updates the process environment immediately.
+ */
+export function AddToPath(): $CancellablePromise<void> {
+    return $Call.ByID(44543575);
+}
+
 export function GetSettings(): $CancellablePromise<$models.Settings> {
     return $Call.ByID(489261139).then(($result: any) => {
         return $$createType0($result);

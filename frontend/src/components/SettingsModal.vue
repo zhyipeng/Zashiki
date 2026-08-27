@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { NModal, NRadioButton, NRadioGroup, NSwitch, NInput, NButton } from 'naive-ui'
+import { useMessage } from 'naive-ui'
 import { useSettings } from '../composables/useSettings'
 import type { ThemeMode } from '../composables/useSettings'
 import { Dialogs } from '@wailsio/runtime'
+import { SettingsService } from '../../bindings/zashiki/internal/settings'
 
 defineProps<{
   show: boolean
@@ -13,6 +16,8 @@ const emit = defineEmits<{
 }>()
 
 const { settings, updateSetting } = useSettings()
+const message = useMessage()
+const addingToPath = ref(false)
 
 const themeOptions: { label: string, value: ThemeMode }[] = [
   { label: '浅色', value: 'light' },
@@ -43,6 +48,21 @@ async function browseDefaultEditor() {
   const path = Array.isArray(result) ? result[0] : result
   if (path) {
     updateSetting('defaultEditor', path)
+  }
+}
+
+async function addToPath() {
+  if (addingToPath.value) return
+
+  addingToPath.value = true
+  try {
+    await SettingsService.AddToPath()
+    message.success('已加入 PATH，请重新打开终端后使用')
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    message.error(`加入 PATH 失败：${detail}`)
+  } finally {
+    addingToPath.value = false
   }
 }
 </script>
@@ -95,6 +115,12 @@ async function browseDefaultEditor() {
         />
         <NButton size="small" @click="browseDefaultEditor">浏览</NButton>
       </div>
+    </div>
+    <div class="setting-item">
+      <span class="setting-label">命令行</span>
+      <NButton size="small" type="primary" :loading="addingToPath" @click="addToPath">
+        加入到 PATH
+      </NButton>
     </div>
   </NModal>
 </template>
