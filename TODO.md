@@ -34,7 +34,9 @@
       - [x] darwin：prepare + LeftMouseDragged monitor + beginDraggingSession
       - [x] windows：SHCreateDataObject + SHDoDragDrop（OLE STA 线程）
       - [ ] linux：GTK 拖出（暂无系统级方案，保留能力点）
-  - [ ] 文件传输
+  - [x] 文件传输
+    - [x] 局域网快传（浏览器即接收端：文件/文本互传、zip 打包、扫码/链接访问）
+      - [ ] 增强：HTTPS、传输历史、上传前确认
 
 ### p3 - 暂时没想到解决方案
   - [x] FileTable 空白区域

@@ -21,6 +21,8 @@
             <string>12.0.0</string>
         <key>NSHighResolutionCapable</key>
             <string>true</string>
+        <key>NSLocalNetworkUsageDescription</key>
+            <string>Zashiki 需要访问本地网络，以便在局域网内与浏览器互传文件和文本。</string>
         <key>NSHumanReadableCopyright</key>
             <string>© 2025, Zashiki</string>
     </dict>

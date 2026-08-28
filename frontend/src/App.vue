@@ -6,16 +6,18 @@ import SplitNode from './components/SplitNode.vue'
 import {createLeaf, splitLeaf, closeLeaf, keepOnlyLeaf, navigateLeaf, getFirstLeafId, getLeafIds, findLeafById} from './components/tree'
 import type {TreeNode} from './components/tree'
 import {FileService} from '../bindings/zashiki/internal/filemanager'
-import { Settings28Regular, Folder28Regular, ArrowSync24Regular } from '@vicons/fluent'
+import { Settings28Regular, Folder28Regular, ArrowSync24Regular, Share28Regular } from '@vicons/fluent'
 import SettingsModal from './components/SettingsModal.vue'
 import OperationProgressbar from './components/OperationProgressbar.vue'
 import SyncToolPage from './components/sync/SyncToolPage.vue'
+import TransferPage from './components/transfer/TransferPage.vue'
 import { useTheme } from './composables/useTheme'
 import { useFileClipboard } from './composables/useFileClipboard'
 import { bindOperationProgressEvents } from './composables/useOperationProgress'
+import { bindLanShareEvents, useLanShare } from './composables/useLanShare'
 
 const showSettings = ref(false)
-const activeView = ref<'files' | 'sync'>('files')
+const activeView = ref<'files' | 'sync' | 'transfer'>('files')
 const { isDarkTheme, mountTheme } = useTheme()
 const fileClipboard = useFileClipboard()
 const naiveTheme = computed(() => isDarkTheme.value ? darkTheme : null)
@@ -57,6 +59,7 @@ const appStatusItems = computed(() => [clipboardStatusText.value, selectionStatu
 onMounted(async () => {
   cleanupTheme = mountTheme()
   bindOperationProgressEvents()
+  bindLanShareEvents()
   window.addEventListener('keydown', onGlobalKeydown)
   clipboardPollTimer = window.setInterval(() => {
     void fileClipboard.refreshSequence()
@@ -108,6 +111,11 @@ watch(homeDir, (home) => {
     rootNode.value = navigateLeaf(rootNode.value, rootNode.value.id, home)
     focusedId.value = rootNode.value.kind === 'leaf' ? rootNode.value.id : getFirstLeafId(rootNode.value)
   }
+})
+
+// FileTable 快速入口排队的分享请求 → 切到快传视图
+watch(useLanShare().pendingShareRequest, (request) => {
+  if (request) activeView.value = 'transfer'
 })
 
 function onNavigate(path: string) {
@@ -264,6 +272,19 @@ function basename(path: string): string {
               </template>
               同步工具
             </n-tooltip>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  text
+                  class="view-switch-button"
+                  :class="{ active: activeView === 'transfer' }"
+                  @click="activeView = 'transfer'"
+                >
+                  <n-icon :size="22"><Share28Regular /></n-icon>
+                </n-button>
+              </template>
+              快传
+            </n-tooltip>
             <n-button text style="font-size: 24px" @click="showSettings = true">
               <n-icon><Settings28Regular/></n-icon>
             </n-button>
@@ -314,6 +335,9 @@ function basename(path: string): string {
         </NSplit>
         <div v-show="activeView === 'sync'" class="app-sync-view">
           <SyncToolPage />
+        </div>
+        <div v-show="activeView === 'transfer'" class="app-transfer-view">
+          <TransferPage />
         </div>
         <OperationProgressbar />
         <SettingsModal v-model:show="showSettings" />
@@ -401,6 +425,12 @@ html, body, #app {
 }
 
 .app-sync-view {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-transfer-view {
   flex: 1;
   min-height: 0;
   overflow: hidden;

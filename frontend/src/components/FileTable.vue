@@ -24,6 +24,7 @@ import { formatShortcutBinding, useKeyboardShortcuts } from '../composables/useK
 import type { ShortcutAction } from '../composables/useKeyboardShortcuts'
 import { notifyDirectoriesChanged, useDirectoryEvents } from '../composables/useDirectoryEvents'
 import { trackOperationPromise, isOperationCancelledError } from '../composables/useOperationProgress'
+import { requestLanShare } from '../composables/useLanShare'
 import { useFileOperationHistory } from '../composables/useFileOperationHistory'
 import DropConfirmModal from './DropConfirmModal.vue'
 import FilePreviewModal from './FilePreviewModal.vue'
@@ -242,7 +243,7 @@ const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 const sortState = ref<DataTableSortState | null>(null)
 const trashLabel = computed(() => props.trashLabel || '回收站')
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
-type ContextActionKey = 'new-folder' | 'open-terminal' | 'open-in-file-manager' | 'paste' | 'refresh' | 'open' | 'open-with-editor' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete'
+type ContextActionKey = 'new-folder' | 'open-terminal' | 'open-in-file-manager' | 'paste' | 'refresh' | 'open' | 'open-with-editor' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete' | 'lan-share'
 
 interface ContextMenuAction {
   key: ContextActionKey
@@ -426,6 +427,16 @@ const contextMenuActions: ContextMenuAction[] = [
     run: (target) => {
       if (target.kind !== 'entry') return
       openDeleteConfirmModal(operationEntriesForEntry(target.entry))
+    },
+  },
+  {
+    key: 'lan-share',
+    label: '局域网分享…',
+    targets: ['entry'],
+    run: (target) => {
+      if (target.kind !== 'entry') return
+      const paths = operationEntriesForEntry(target.entry).map(entry => entry.path)
+      requestLanShare(paths)
     },
   },
 ]

@@ -18,8 +18,8 @@ export function AddToContextMenu(): $CancellablePromise<void> {
 }
 
 /**
- * AddToPath adds the directory containing the running application to the
- * current user's PATH and updates the process environment immediately.
+ * AddToPath adds the running application to the current user's PATH and
+ * updates the process environment immediately.
  */
 export function AddToPath(): $CancellablePromise<void> {
     return $Call.ByID(44543575);

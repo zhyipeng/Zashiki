@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"zashiki/internal/filemanager"
+	"zashiki/internal/lanshare"
 	"zashiki/internal/nativefs"
 	"zashiki/internal/settings"
 
@@ -127,6 +128,8 @@ func main() {
 	initialDir := resolveInitialDir(os.Args[1:])
 	fileService.SetInitialDir(initialDir)
 
+	lanShareService := lanshare.NewLanShareService()
+
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
 	// 'Assets' configures the asset server with the 'FS' variable pointing to the frontend files.
@@ -139,6 +142,7 @@ func main() {
 			application.NewService(fileService),
 			application.NewService(&settings.SettingsService{}),
 			application.NewService(nativefs.NewFileTransferService()),
+			application.NewService(lanShareService),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),

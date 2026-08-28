@@ -9,14 +9,25 @@ import { Create as $Create } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as filemanager$0 from "../../../../../zashiki/internal/filemanager/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as lanshare$0 from "../../../../../zashiki/internal/lanshare/models.js";
 
 function configure() {
     Object.freeze(Object.assign($Create.Events, {
         "filemanager:operation-progress": $$createType0,
+        "lanshare:items-changed": $$createType1,
+        "lanshare:server-status": $$createType2,
+        "lanshare:text-received": $$createType3,
+        "lanshare:transfer-progress": $$createType4,
     }));
 }
 
 // Private type creation functions
 const $$createType0 = filemanager$0.OperationProgress.createFrom;
+const $$createType1 = lanshare$0.ItemsChanged.createFrom;
+const $$createType2 = lanshare$0.ServerStatus.createFrom;
+const $$createType3 = lanshare$0.TextReceived.createFrom;
+const $$createType4 = lanshare$0.TransferProgress.createFrom;
 
 configure();

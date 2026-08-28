@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zashiki 快传</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1f2329; --muted: #8a9099;
+    --primary: #18a058; --primary-weak: #e8f7ef; --border: #e5e7eb;
+    --danger: #d03050; --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101014; --card: #1b1c20; --text: #e6e7ea; --muted: #8a9099;
+      --primary: #2bb46a; --primary-weak: #16301f; --border: #2c2e33;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px 12px 40px; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  .header { text-align: center; padding: 12px 0 20px; }
+  .header h1 { margin: 0; font-size: 22px; }
+  .header p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 16px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; justify-content: space-between; }
+  .empty { color: var(--muted); font-size: 13px; text-align: center; padding: 12px 0; }
+  .item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .item:last-child { border-bottom: none; }
+  .thumb {
+    width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex-shrink: 0;
+    background: var(--primary-weak); display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 11px;
+  }
+  .item-main { flex: 1; min-width: 0; }
+  .item-name { font-size: 14px; word-break: break-all; }
+  .item-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .text-body {
+    background: var(--primary-weak); border-radius: 8px; padding: 10px 12px;
+    font-size: 13px; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow: auto;
+  }
+  button {
+    border: none; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
+    background: var(--primary); color: #fff; flex-shrink: 0;
+  }
+  button.ghost { background: transparent; color: var(--primary); border: 1px solid var(--primary); }
+  button:disabled { opacity: .5; cursor: default; }
+  .dropzone {
+    border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px 12px;
+    text-align: center; color: var(--muted); font-size: 13px; transition: border-color .15s;
+  }
+  .dropzone.over { border-color: var(--primary); color: var(--primary); }
+  textarea {
+    width: 100%; min-height: 72px; resize: vertical; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font-size: 14px; font-family: inherit;
+    background: var(--bg); color: var(--text);
+  }
+  .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  .progress { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .progress > div { height: 100%; background: var(--primary); width: 0; transition: width .2s; }
+  .progress-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .tip { color: var(--muted); font-size: 12px; margin-top: 10px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>Zashiki 快传</h1>
+    <p>同一局域网内与 Zashiki 互传文件和文本</p>
+  </div>
+
+  <div class="card">
+    <h2>共享的文件 <button id="zip-all" class="ghost" style="display:none">全部下载</button></h2>
+    <div id="file-list"><div class="empty">暂无共享文件</div></div>
+  </div>
+
+  <div class="card">
+    <h2>共享的文本</h2>
+    <div id="text-list"><div class="empty">暂无共享文本</div></div>
+  </div>
+
+  <div class="card">
+    <h2>发送文件到 Zashiki</h2>
+    <div id="dropzone" class="dropzone">点击选择或拖拽文件到这里</div>
+    <input id="file-input" type="file" multiple hidden>
+    <div id="upload-progress"></div>
+    <div class="tip">文件将保存到 Zashiki 的接收目录</div>
+  </div>
+
+  <div class="card">
+    <h2>发送文本到 Zashiki</h2>
+    <textarea id="text-input" placeholder="输入要发送的文本…"></textarea>
+    <div class="row"><button id="text-send">发送</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var pollTimer = null;
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    var units = ['KB', 'MB', 'GB', 'TB'];
+    var value = bytes, unit = -1;
+    do { value /= 1024; unit++; } while (value >= 1024 && unit < units.length - 1);
+    return (value >= 100 ? Math.round(value) : value.toFixed(1)) + ' ' + units[unit];
+  }
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function renderItems(items) {
+    var files = items.filter(function (it) { return it.kind === 'file'; });
+    var texts = items.filter(function (it) { return it.kind === 'text'; });
+
+    var fileList = $('file-list');
+    fileList.textContent = '';
+    if (files.length === 0) {
+      fileList.appendChild(el('div', 'empty', '暂无共享文件'));
+    }
+    files.forEach(function (item) {
+      var row = el('div', 'item');
+      if (item.isImage) {
+        var img = document.createElement('img');
+        img.className = 'thumb';
+        img.alt = '';
+        img.src = 'download/' + encodeURIComponent(item.id) + '?preview=1';
+        row.appendChild(img);
+      } else {
+        row.appendChild(el('div', 'thumb', '文件'));
+      }
+      var main = el('div', 'item-main');
+      main.appendChild(el('div', 'item-name', item.name));
+      main.appendChild(el('div', 'item-sub', formatBytes(item.size)));
+      row.appendChild(main);
+      var btn = el('button', '', '下载');
+      btn.addEventListener('click', function () {
+        location.href = 'download/' + encodeURIComponent(item.id);
+      });
+      row.appendChild(btn);
+      fileList.appendChild(row);
+    });
+    $('zip-all').style.display = files.length > 1 ? '' : 'none';
+
+    var textList = $('text-list');
+    textList.textContent = '';
+    if (texts.length === 0) {
+      textList.appendChild(el('div', 'empty', '暂无共享文本'));
+    }
+    texts.forEach(function (item) {
+      var row = el('div', 'item');
+      var main = el('div', 'item-main');
+      main.appendChild(el('div', 'item-name', item.name));
+      var body = el('div', 'text-body', item.text);
+      body.style.marginTop = '6px';
+      main.appendChild(body);
+      row.appendChild(main);
+      var btn = el('button', 'ghost', '复制');
+      btn.addEventListener('click', function () {
+        navigator.clipboard.writeText(item.text).then(function () {
+          btn.textContent = '已复制';
+          setTimeout(function () { btn.textContent = '复制'; }, 1200);
+        });
+      });
+      row.appendChild(btn);
+      textList.appendChild(row);
+    });
+  }
+
+  function poll() {
+    fetch('items', { cache: 'no-store' })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) { if (data && data.items) renderItems(data.items); })
+      .catch(function () {});
+  }
+
+  function addUploadProgress(name, xhr) {
+    var box = $('upload-progress');
+    var entry = el('div');
+    var label = el('div', 'item-name', name);
+    var bar = el('div', 'progress');
+    var inner = el('div');
+    bar.appendChild(inner);
+    var status = el('div', 'progress-label', '上传中…');
+    entry.appendChild(label);
+    entry.appendChild(bar);
+    entry.appendChild(status);
+    box.appendChild(entry);
+
+    xhr.upload.addEventListener('progress', function (e) {
+      if (e.lengthComputable) {
+        var pct = Math.floor((e.loaded / e.total) * 100);
+        inner.style.width = pct + '%';
+        status.textContent = '上传中 ' + pct + '%';
+      }
+    });
+    xhr.addEventListener('load', function () {
+      if (xhr.status === 200) {
+        inner.style.width = '100%';
+        status.textContent = '完成';
+      } else {
+        status.textContent = '失败（' + xhr.status + '）';
+      }
+    });
+    xhr.addEventListener('error', function () { status.textContent = '失败'; });
+    setTimeout(function () { entry.remove(); }, 8000);
+  }
+
+  function uploadFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    files.forEach(function (file) {
+      var form = new FormData();
+      form.append('files', file, file.name);
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', 'upload');
+      addUploadProgress(file.name, xhr);
+      xhr.send(form);
+    });
+  }
+
+  function bindUpload() {
+    var zone = $('dropzone');
+    var input = $('file-input');
+    zone.addEventListener('click', function () { input.click(); });
+    input.addEventListener('change', function () {
+      uploadFiles(input.files);
+      input.value = '';
+    });
+    ['dragenter', 'dragover'].forEach(function (name) {
+      zone.addEventListener(name, function (e) {
+        e.preventDefault();
+        zone.classList.add('over');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (name) {
+      zone.addEventListener(name, function (e) {
+        e.preventDefault();
+        zone.classList.remove('over');
+      });
+    });
+    zone.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) uploadFiles(e.dataTransfer.files);
+    });
+  }
+
+  function bindText() {
+    $('text-send').addEventListener('click', function () {
+      var input = $('text-input');
+      var text = input.value;
+      if (!text.trim()) return;
+      var btn = $('text-send');
+      btn.disabled = true;
+      fetch('text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text })
+      }).then(function (res) {
+        if (res.ok) input.value = '';
+      }).catch(function () {}).finally(function () {
+        btn.disabled = false;
+      });
+    });
+  }
+
+  function bindZip() {
+    $('zip-all').addEventListener('click', function () {
+      location.href = 'zip';
+    });
+  }
+
+  bindUpload();
+  bindText();
+  bindZip();
+  poll();
+  pollTimer = setInterval(poll, 3000);
+  window.addEventListener('beforeunload', function () { clearInterval(pollTimer); });
+})();
+</script>
+</body>
+</html>
