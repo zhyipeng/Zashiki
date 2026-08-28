@@ -10,7 +10,7 @@
   <Identity 
     Name="com.zashiki.fileexplorer"
     Publisher="CN=Zashiki"
-    Version="0.0.11.0"
+    Version="0.0.12.0"
     ProcessorArchitecture="arm64" />
   
   <Properties>

@@ -4,8 +4,8 @@ set -e
 # Build configuration
 APP_NAME="file-explorer"
 BUNDLE_ID="com.example.fileexplorer"
-VERSION="0.0.11"
-BUILD_NUMBER="0.0.11"
+VERSION="0.0.12"
+BUILD_NUMBER="0.0.12"
 BUILD_DIR="build/ios"
 TARGET="simulator"
 
