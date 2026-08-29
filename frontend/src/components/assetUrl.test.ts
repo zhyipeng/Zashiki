@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { encodeAssetPath, htmlAssetUrl, mediaAssetUrl, thumbnailUrl } from './assetUrl'
+import { encodeAssetPath, htmlAssetUrl, mediaStreamUrl, setMediaStreamBase, thumbnailUrl } from './assetUrl'
 
 describe('encodeAssetPath', () => {
   it('produces base64url compatible with Go base64.URLEncoding', () => {
@@ -33,6 +33,14 @@ describe('asset urls', () => {
   })
 
   it('builds media asset url', () => {
-    expect(mediaAssetUrl('/tmp/a.mp4')).toBe(`/__media__/${encodeAssetPath('/tmp/a.mp4')}`)
+    setMediaStreamBase('http://127.0.0.1:53101/media/tok/')
+    expect(mediaStreamUrl('/tmp/a.mp4')).toBe(
+      `http://127.0.0.1:53101/media/tok/${encodeAssetPath('/tmp/a.mp4')}`,
+    )
+  })
+
+  it('returns empty media url before the stream base is configured', () => {
+    setMediaStreamBase('')
+    expect(mediaStreamUrl('/tmp/a.mp4')).toBe('')
   })
 })

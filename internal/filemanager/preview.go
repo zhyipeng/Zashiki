@@ -146,6 +146,8 @@ func (mediaPreviewProvider) Build(ctx previewContext) (FilePreview, error) {
 
 type officePreviewProvider struct{}
 
+// officePreviewProvider 匹配 Office 文件。不读取文件内容——前端通过
+// mediastream 流式服务器取字节，避免 base64 过 IPC 撑爆两端内存。
 func (officePreviewProvider) Match(ctx previewContext) bool {
 	return previewOfficeMIMETypes[ctx.ext] != ""
 }
@@ -157,21 +159,15 @@ func (officePreviewProvider) Build(ctx previewContext) (FilePreview, error) {
 		return preview, nil
 	}
 
-	data, err := os.ReadFile(ctx.path)
-	if err != nil {
-		return FilePreview{}, err
-	}
-
-	mimeType := previewOfficeMIMETypes[ctx.ext]
-
 	preview := baseFilePreview(ctx, "office")
-	preview.MimeType = mimeType
-	preview.DataURL = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
+	preview.MimeType = previewOfficeMIMETypes[ctx.ext]
 	return preview, nil
 }
 
 type pdfPreviewProvider struct{}
 
+// pdfPreviewProvider 匹配 PDF。不读取文件内容——前端通过 mediastream
+// 流式服务器取字节。
 func (pdfPreviewProvider) Match(ctx previewContext) bool {
 	return previewPdfMIMETypes[ctx.ext] != ""
 }
@@ -183,16 +179,8 @@ func (pdfPreviewProvider) Build(ctx previewContext) (FilePreview, error) {
 		return preview, nil
 	}
 
-	data, err := os.ReadFile(ctx.path)
-	if err != nil {
-		return FilePreview{}, err
-	}
-
-	mimeType := previewPdfMIMETypes[ctx.ext]
-
 	preview := baseFilePreview(ctx, "pdf")
-	preview.MimeType = mimeType
-	preview.DataURL = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
+	preview.MimeType = previewPdfMIMETypes[ctx.ext]
 	return preview, nil
 }
 
@@ -410,13 +398,17 @@ var previewVideoMIMETypes = map[string]string{
 	".wmv":  "video/x-ms-wmv",
 }
 
-// MediaMimeType 返回音视频扩展名对应的 MIME 类型，非音视频扩展名返回空串。
-// 供 /__media__/ 流式中间件与预览 provider 共用。
-func MediaMimeType(ext string) string {
+// FileMimeType 返回文件名（或扩展名）对应的 MIME 类型，非已知类型时回退到
+// 系统注册表/std 映射。供预览 provider 与 /media 流式服务器共用。
+func FileMimeType(name string) string {
+	ext := strings.ToLower(filepath.Ext(name))
 	if mimeType := previewAudioMIMETypes[ext]; mimeType != "" {
 		return mimeType
 	}
-	return previewVideoMIMETypes[ext]
+	if mimeType := previewVideoMIMETypes[ext]; mimeType != "" {
+		return mimeType
+	}
+	return previewMimeType(name)
 }
 
 var previewTextMIMETypes = map[string]string{

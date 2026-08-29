@@ -15,6 +15,7 @@ import (
 
 	"zashiki/internal/filemanager"
 	"zashiki/internal/lanshare"
+	"zashiki/internal/mediastream"
 	"zashiki/internal/nativefs"
 	"zashiki/internal/settings"
 
@@ -100,80 +101,19 @@ func htmlAssetMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-const mediaPrefix = "/__media__/"
-
-// mediaMiddleware intercepts requests to /__media__/ and streams local
-// audio/video files to the WebView's native <audio>/<video> components.
-// http.ServeContent handles Range/If-Range so seeking works without loading
-// the whole file, and there is intentionally no size cap.
-func mediaMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		if !strings.HasPrefix(req.URL.Path, mediaPrefix) {
-			next.ServeHTTP(rw, req)
-			return
-		}
-
-		encodedPath := strings.TrimPrefix(req.URL.Path, mediaPrefix)
-		decodedPath, err := base64.URLEncoding.DecodeString(encodedPath)
-		if err != nil {
-			rw.WriteHeader(http.StatusBadRequest)
-			rw.Write([]byte("invalid path encoding"))
-			return
-		}
-		localPath := string(decodedPath)
-
-		// Security: only allow absolute paths and prevent traversal
-		if !filepath.IsAbs(localPath) {
-			rw.WriteHeader(http.StatusBadRequest)
-			rw.Write([]byte("path must be absolute"))
-			return
-		}
-		cleanPath := filepath.Clean(localPath)
-		if cleanPath != localPath {
-			rw.WriteHeader(http.StatusBadRequest)
-			rw.Write([]byte("path contains traversal"))
-			return
-		}
-
-		info, err := os.Stat(cleanPath)
-		if err != nil {
-			rw.WriteHeader(http.StatusNotFound)
-			rw.Write([]byte("file not found"))
-			return
-		}
-		if info.IsDir() {
-			rw.WriteHeader(http.StatusBadRequest)
-			rw.Write([]byte("path is a directory"))
-			return
-		}
-
-		file, err := os.Open(cleanPath)
-		if err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			rw.Write([]byte("failed to open file"))
-			return
-		}
-		defer file.Close()
-
-		mimeType := filemanager.MediaMimeType(strings.ToLower(filepath.Ext(cleanPath)))
-		if mimeType == "" {
-			mimeType = "application/octet-stream"
-		}
-		rw.Header().Set("Content-Type", mimeType)
-		http.ServeContent(rw, req, info.Name(), info.ModTime(), file)
-	})
-}
-
 const thumbnailPrefix = "/__thumbnails__/"
 
 // maxRawThumbnailFallbackBytes 限制无法解码格式的原样回退大小；
 // 超过该值的大图宁可 404 让前端显示图标，也不把整图塞进 WebView。
 const maxRawThumbnailFallbackBytes = 20 * 1024 * 1024
 
-// assetMiddleware 组合本地资源中间件：/__html_assets__/、/__thumbnails__/ 与
-// /__media__/ 各自拦截，其余请求交给内置资源服务器。
+// assetMiddleware 组合本地资源中间件：/__html_assets__/ 与 /__thumbnails__/
+// 各自拦截，其余请求交给内置资源服务器。注意这两个中间件响应的都是小文件
+// （≤10MB/≤20MB）；音频视频与 Office/PDF 的大文件流式传输走独立的
+// mediastream loopback 服务器——Windows 上 Wails 资源管线会把整个响应体
+// 缓冲进内存，大文件必须绕开它。
 func assetMiddleware(next http.Handler) http.Handler {
-	return htmlAssetMiddleware(thumbnailMiddleware(mediaMiddleware(next)))
+	return htmlAssetMiddleware(thumbnailMiddleware(next))
 }
 
 // thumbnailMiddleware intercepts requests to /__thumbnails__/{base64 path}?s={size}
@@ -311,6 +251,14 @@ func main() {
 
 	lanShareService := lanshare.NewLanShareService()
 
+	// 大文件流式预览（音视频 / Office / PDF）走独立 loopback 服务器，
+	// 避免经 Wails 资源管线把整个响应体缓冲进内存。
+	mediaStreamService := mediastream.NewService()
+	if err := mediaStreamService.Start(); err != nil {
+		log.Printf("media stream server unavailable, large previews disabled: %v", err)
+	}
+	defer mediaStreamService.Stop()
+
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
 	// 'Assets' configures the asset server with the 'FS' variable pointing to the frontend files.
@@ -324,6 +272,7 @@ func main() {
 			application.NewService(&settings.SettingsService{}),
 			application.NewService(nativefs.NewFileTransferService()),
 			application.NewService(lanShareService),
+			application.NewService(mediaStreamService),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),

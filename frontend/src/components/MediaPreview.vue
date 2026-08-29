@@ -2,15 +2,19 @@
 import { computed, ref, watch } from 'vue'
 import { NEmpty } from 'naive-ui'
 import type { FilePreview } from '../../bindings/zashiki/internal/filemanager'
-import { mediaAssetUrl } from './assetUrl'
+import { mediaStreamUrl } from './assetUrl'
 
 const props = defineProps<{
   preview: FilePreview
 }>()
 
 const isVideo = computed(() => props.preview.kind === 'video')
-const src = computed(() => mediaAssetUrl(props.preview.path))
+const src = computed(() => mediaStreamUrl(props.preview.path))
 const loadFailed = ref(false)
+
+const failText = computed(() =>
+  src.value ? '浏览器不支持此媒体编码格式，无法预览' : '媒体预览服务不可用',
+)
 
 watch(() => props.preview.path, () => {
   loadFailed.value = false
@@ -24,9 +28,9 @@ function onMediaError() {
 <template>
   <div class="media-preview" :class="{ 'is-audio': !isVideo }">
     <NEmpty
-      v-if="loadFailed"
+      v-if="loadFailed || !src"
       class="media-fallback"
-      description="浏览器不支持此媒体编码格式，无法预览"
+      :description="failText"
     />
     <video
       v-else-if="isVideo"

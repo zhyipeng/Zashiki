@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { NButton, NButtonGroup, NSpin, NAlert, NText } from 'naive-ui'
 import type { FilePreview } from '../../bindings/zashiki/internal/filemanager'
+import { mediaStreamUrl } from './assetUrl'
 
 const VuePdfEmbed = defineAsyncComponent(() => import('vue-pdf-embed'))
 
@@ -16,10 +17,12 @@ const pageTotal = ref(1)
 
 const pageLabel = computed(() => `${pageIndex.value} / ${pageTotal.value} 页`)
 
+// pdf.js 直接对流式 URL 拉取字节（服务器支持 Range），不再经 base64 IPC。
 const pdfSource = computed(() => {
-  if (!props.preview.dataUrl) return null
+  const url = mediaStreamUrl(props.preview.path)
+  if (!url) return null
   return {
-    url: props.preview.dataUrl,
+    url,
     cMapUrl: 'https://unpkg.com/pdfjs-dist/cmaps/',
     cMapPacked: true,
   }
@@ -54,9 +57,9 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
-  if (!props.preview.dataUrl) {
+  if (!pdfSource.value) {
     loadingState.value = 'error'
-    errorMsg.value = '没有文件数据'
+    errorMsg.value = '预览服务不可用'
   }
   window.addEventListener('keydown', onKeydown)
 })

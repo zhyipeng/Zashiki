@@ -188,8 +188,12 @@ func TestFileService_GetFilePreview_Office(t *testing.T) {
 			if preview.MimeType != tt.wantMime {
 				t.Fatalf("MimeType = %q, want %q", preview.MimeType, tt.wantMime)
 			}
-			if !strings.HasPrefix(preview.DataURL, "data:"+tt.wantMime+";base64,") {
-				t.Fatalf("DataURL = %q, want %q prefix", preview.DataURL, "data:"+tt.wantMime+";base64,")
+			// 元数据化：内容由前端经 mediastream 流式获取，不再走 base64 IPC。
+			if preview.DataURL != "" {
+				t.Fatal("DataURL should stay empty for office preview")
+			}
+			if preview.Content != "" {
+				t.Fatal("Content should stay empty for office preview")
 			}
 			if preview.Size != int64(len(content)) {
 				t.Fatalf("Size = %d, want %d", preview.Size, len(content))
@@ -242,8 +246,8 @@ func TestFileService_GetFilePreview_Pdf(t *testing.T) {
 	if preview.MimeType != "application/pdf" {
 		t.Fatalf("MimeType = %q, want application/pdf", preview.MimeType)
 	}
-	if !strings.HasPrefix(preview.DataURL, "data:application/pdf;base64,") {
-		t.Fatalf("DataURL = %q, want application/pdf data URL prefix", preview.DataURL)
+	if preview.DataURL != "" {
+		t.Fatal("DataURL should stay empty for pdf preview")
 	}
 	if preview.Size != int64(len(content)) {
 		t.Fatalf("Size = %d, want %d", preview.Size, len(content))

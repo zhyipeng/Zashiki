@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { NButton, NButtonGroup, NSpin, NAlert, NText } from 'naive-ui'
 import type { FilePreview } from '../../bindings/zashiki/internal/filemanager'
+import { mediaStreamUrl } from './assetUrl'
 
 const props = defineProps<{
   preview: FilePreview
@@ -31,16 +32,14 @@ const pageLabel = computed(() => {
 let viewer: any = null
 let resizeObserver: ResizeObserver | null = null
 
-function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
-  const commaIdx = dataUrl.indexOf(',')
-  if (commaIdx === -1) throw new Error('无效的数据格式')
-  const base64 = dataUrl.substring(commaIdx + 1)
-  const binaryStr = atob(base64)
-  const bytes = new Uint8Array(binaryStr.length)
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i)
-  }
-  return bytes.buffer
+// 流式获取文件字节：经 mediastream loopback 服务器，避免 base64 过 IPC
+// 在 Go/JS 两端各留一份大字符串。
+async function loadArrayBuffer(): Promise<ArrayBuffer> {
+  const url = mediaStreamUrl(props.preview.path)
+  if (!url) throw new Error('预览服务不可用')
+  const resp = await fetch(url)
+  if (!resp.ok) throw new Error(`读取文件失败 (${resp.status})`)
+  return resp.arrayBuffer()
 }
 
 function onPageChange(index: number, total: number) {
@@ -88,7 +87,7 @@ async function initXlsxViewer(container: HTMLElement, data: ArrayBuffer) {
 }
 
 async function initViewer() {
-  if (!props.preview.dataUrl) {
+  if (!props.preview.path) {
     loadingState.value = 'error'
     errorMsg.value = '没有文件数据'
     return
@@ -98,7 +97,7 @@ async function initViewer() {
   errorMsg.value = ''
 
   try {
-    const arrayBuffer = dataUrlToArrayBuffer(props.preview.dataUrl)
+    const arrayBuffer = await loadArrayBuffer()
     await nextTick()
 
     if (viewerType.value === 'xlsx') {

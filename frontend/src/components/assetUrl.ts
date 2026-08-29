@@ -23,6 +23,17 @@ export function thumbnailUrl(localPath: string, size = 256): string {
   return `/__thumbnails__/${encodeAssetPath(localPath)}?s=${size}`
 }
 
-export function mediaAssetUrl(localPath: string): string {
-  return `/__media__/${encodeAssetPath(localPath)}`
+// mediastream 流式服务器的根地址（含随机令牌），应用启动时由 main.ts 注入。
+// 大文件（音视频/Office/PDF）必须走这条通道——Windows 上 Wails 资源管线
+// 会把整个响应体缓冲进内存，无法流式传输。
+let mediaStreamBase = ''
+
+export function setMediaStreamBase(base: string) {
+  mediaStreamBase = base.replace(/\/+$/, '')
+}
+
+/** 构建流式资源 URL；服务器未就绪时返回空串。 */
+export function mediaStreamUrl(localPath: string): string {
+  if (!mediaStreamBase) return ''
+  return `${mediaStreamBase}/${encodeAssetPath(localPath)}`
 }
