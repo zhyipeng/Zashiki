@@ -6,7 +6,7 @@ let activeFileTableShortcutScopeId = 0
 <script setup lang="ts">
 import { ref, watch, computed, h, nextTick, onMounted } from 'vue'
 import type { VNodeChild } from 'vue'
-import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NInput, NAutoComplete, NDropdown, NModal, NSpace, NTag, useMessage } from 'naive-ui'
+import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NCheckbox, NInput, NAutoComplete, NDropdown, NModal, NSpace, NTag, useMessage } from 'naive-ui'
 import type { AutoCompleteInst, AutoCompleteOption, DataTableColumns, DataTableInst, DataTableSortState, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
@@ -92,6 +92,25 @@ function markExeIconFailed(path: string) {
 
 function cellShowsThumbnail(row: FileEntry): boolean {
   return galleryMode.value && isImageEntry(row) && !thumbFailures.value[row.path]
+}
+
+// 看图模式多选：全选栏状态与选框切换（不含 .. 父目录行）。
+const thumbSelectableEntries = computed(() => visibleEntries.value.filter(entry => !isParentEntry(entry)))
+const thumbAllSelected = computed(() => {
+  const list = thumbSelectableEntries.value
+  return list.length > 0 && list.every(entry => selectedPathSet.value.has(entry.path))
+})
+const thumbSomeSelected = computed(() => {
+  return !thumbAllSelected.value && thumbSelectableEntries.value.some(entry => selectedPathSet.value.has(entry.path))
+})
+
+function toggleThumbChecked(row: FileEntry) {
+  toggleSelectedRow(row.path)
+  currentRowKey.value = row.path
+}
+
+function toggleThumbSelectAll(checked: boolean) {
+  selectedRowKeys.value = checked ? thumbSelectableEntries.value.map(entry => entry.path) : []
 }
 
 function loadDir(p: string) {
@@ -2113,34 +2132,54 @@ useKeyboardShortcuts(() => shortcutActions, {
       />
       <div
         v-else-if="galleryMode && visibleEntries.length > 0"
-        class="thumb-grid"
+        class="thumb-area"
       >
-        <div
-          v-for="row in visibleEntries"
-          :key="row.path"
-          v-bind="entryCellProps(row)"
-          class="thumb-cell"
-        >
-          <div class="thumb-cell-visual">
-            <img
-              v-if="cellShowsThumbnail(row)"
-              class="thumb-image"
-              loading="lazy"
-              decoding="async"
-              :src="thumbnailUrl(row.path, THUMBNAIL_SIZE)"
-              :alt="row.name"
-              @error="markThumbFailed(row.path)"
+        <div v-if="multiSelectMode" class="thumb-select-bar">
+          <NCheckbox
+            :checked="thumbAllSelected"
+            :indeterminate="thumbSomeSelected"
+            @update:checked="toggleThumbSelectAll"
+          >
+            全选
+          </NCheckbox>
+          <span class="thumb-select-count">已选 {{ selectedRowKeys.length }} 项</span>
+        </div>
+        <div class="thumb-grid">
+          <div
+            v-for="row in visibleEntries"
+            :key="row.path"
+            v-bind="entryCellProps(row)"
+            class="thumb-cell"
+          >
+            <NCheckbox
+              v-if="multiSelectMode && !isParentEntry(row)"
+              class="thumb-checkbox"
+              :checked="selectedPathSet.has(row.path)"
+              @click.stop
+              @pointerdown.stop
+              @update:checked="() => toggleThumbChecked(row)"
             />
-            <NIcon
-              v-else
-              class="thumb-icon"
-              :size="isParentEntry(row) ? 36 : 40"
-              :color="isParentEntry(row) ? 'var(--n-primary-color, #18a058)' : resolveFileIcon(row).color"
-            >
-              <component :is="isParentEntry(row) ? FolderArrowUp24Regular : resolveFileIcon(row).icon" />
-            </NIcon>
+            <div class="thumb-cell-visual">
+              <img
+                v-if="cellShowsThumbnail(row)"
+                class="thumb-image"
+                loading="lazy"
+                decoding="async"
+                :src="thumbnailUrl(row.path, THUMBNAIL_SIZE)"
+                :alt="row.name"
+                @error="markThumbFailed(row.path)"
+              />
+              <NIcon
+                v-else
+                class="thumb-icon"
+                :size="isParentEntry(row) ? 36 : 40"
+                :color="isParentEntry(row) ? 'var(--n-primary-color, #18a058)' : resolveFileIcon(row).color"
+              >
+                <component :is="isParentEntry(row) ? FolderArrowUp24Regular : resolveFileIcon(row).icon" />
+              </NIcon>
+            </div>
+            <span class="thumb-cell-name" :title="row.name">{{ row.name }}</span>
           </div>
-          <span class="thumb-cell-name" :title="row.name">{{ row.name }}</span>
         </div>
       </div>
       <NEmpty v-else :description="searchQuery ? 'No matches' : 'Empty directory'" class="empty-fill" />
@@ -2370,7 +2409,31 @@ useKeyboardShortcuts(() => shortcutActions, {
 }
 
 /* 看图模式（缩略图网格） */
+.thumb-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.thumb-select-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--n-border-color);
+  flex-shrink: 0;
+}
+
+.thumb-select-count {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
 .thumb-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
   gap: 8px;
@@ -2379,6 +2442,7 @@ useKeyboardShortcuts(() => shortcutActions, {
 }
 
 .thumb-cell {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2388,6 +2452,16 @@ useKeyboardShortcuts(() => shortcutActions, {
   border: 1px solid transparent;
   min-width: 0;
   user-select: none;
+}
+
+.thumb-checkbox {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+  padding: 1px 2px;
 }
 
 .thumb-cell:hover {
