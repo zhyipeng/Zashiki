@@ -1,5 +1,5 @@
 import type { Component } from 'vue'
-import { FolderOutlined, ImageOutlined, InsertDriveFileOutlined, LinkOutlined } from '@vicons/material'
+import { FolderOutlined, ImageOutlined, InsertDriveFileOutlined, LinkOutlined, MovieOutlined, MusicNoteOutlined } from '@vicons/material'
 import { Document24Regular, DocumentText24Regular } from '@vicons/fluent'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
 
@@ -8,6 +8,8 @@ export type FileIconSource =
   | 'executable'
   | 'symlink'
   | 'image'
+  | 'audio'
+  | 'video'
   | 'extension'
   | 'text'
   | 'binary'
@@ -43,7 +45,17 @@ export const specialFileIcons = {
     color: '#2F9E44',
     label: '图片',
   },
-} satisfies Record<'directory' | 'executable' | 'symlink' | 'image', FileIconDefinition>
+  audio: {
+    icon: MusicNoteOutlined,
+    color: '#7048E8',
+    label: '音频',
+  },
+  video: {
+    icon: MovieOutlined,
+    color: '#E03131',
+    label: '视频',
+  },
+} satisfies Record<'directory' | 'executable' | 'symlink' | 'image' | 'audio' | 'video', FileIconDefinition>
 
 export const fallbackFileIcons = {
   text: {
@@ -75,6 +87,53 @@ export const imageExtensions = new Set([
   '.tif',
   '.tiff',
   '.webp',
+])
+
+export const audioExtensions = new Set([
+  '.aac',
+  '.ac3',
+  '.aif',
+  '.aiff',
+  '.amr',
+  '.ape',
+  '.caf',
+  '.flac',
+  '.m4a',
+  '.mka',
+  '.mid',
+  '.midi',
+  '.mp3',
+  '.oga',
+  '.ogg',
+  '.opus',
+  '.ra',
+  '.wav',
+  '.wma',
+])
+
+export const videoExtensions = new Set([
+  '.3g2',
+  '.3gp',
+  '.asf',
+  '.avi',
+  '.divx',
+  '.f4v',
+  '.flv',
+  '.m2ts',
+  '.m4v',
+  '.mkv',
+  '.mov',
+  '.mp4',
+  '.mpe',
+  '.mpeg',
+  '.mpg',
+  '.mts',
+  '.ogv',
+  '.rm',
+  '.rmvb',
+  '.vob',
+  '.webm',
+  '.wmv',
 ])
 
 export const textExtensions = new Set([
@@ -116,6 +175,12 @@ export function resolveFileIcon(entry: FileEntry): ResolvedFileIcon {
   if (imageExtensions.has(extension)) {
     return { ...specialFileIcons.image, source: 'image' }
   }
+  if (audioExtensions.has(extension)) {
+    return { ...specialFileIcons.audio, source: 'audio' }
+  }
+  if (videoExtensions.has(extension)) {
+    return { ...specialFileIcons.video, source: 'video' }
+  }
 
   const extensionIcon = extensionFileIcons[extension]
   if (extensionIcon) {
@@ -135,6 +200,8 @@ export function fileTypeLabel(entry: FileEntry): string {
 
   const extension = fileExtension(entry.name)
   if (imageExtensions.has(extension)) return '图片'
+  if (audioExtensions.has(extension)) return '音频'
+  if (videoExtensions.has(extension)) return '视频'
   if (textExtensions.has(extension)) return '文本'
   if (extension) return extension.slice(1).toUpperCase()
   return '文件'

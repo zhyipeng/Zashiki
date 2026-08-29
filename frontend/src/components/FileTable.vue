@@ -13,7 +13,7 @@ import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { FileTransferService, ClipboardOperation } from '../../bindings/zashiki/internal/nativefs'
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
 import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined, SearchOutlined, UndoSharp, RedoSharp } from '@vicons/material'
-import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular } from '@vicons/fluent'
+import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular, GridDots28Regular } from '@vicons/fluent'
 import { useSettings } from '../composables/useSettings'
 import { clearDrag, startNativeFileExplorerDrag, useDragDrop } from '../composables/useDragDrop'
 import { useSystemFileDrop } from '../composables/useSystemFileDrop'
@@ -29,6 +29,8 @@ import { useFileOperationHistory } from '../composables/useFileOperationHistory'
 import DropConfirmModal from './DropConfirmModal.vue'
 import FilePreviewModal from './FilePreviewModal.vue'
 import { fileTypeLabel, isTextFile, resolveFileIcon } from './fileIcons'
+import { isImageEntry, THUMBNAIL_SIZE } from './thumbnails'
+import { thumbnailUrl } from './assetUrl'
 import {
   createFindModeTargets,
   exactFindModeLabelMatch,
@@ -48,7 +50,6 @@ const fileTableRef = ref<HTMLElement | null>(null)
 const tableAreaRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<DataTableInst | null>(null)
 const fileClipboard = useFileClipboard()
-const cutPathSet = computed(() => fileClipboard.cutPathSet)
 const visibleEntries = computed(() => {
   const filteredEntries = settings.showHiddenFiles
     ? entries.value
@@ -74,12 +75,26 @@ const PAGE_SIZE = 500
 // 每次 loadDir/refresh 递增，旧的后台补齐循环检测到代际变化自动终止。
 let loadGeneration = 0
 
+// 看图模式：面板内独立的视图开关（列表 ⇄ 缩略图网格），不持久化。
+const galleryMode = ref(false)
+// 缩略图加载失败的路径集合，失败后回退为类型图标。
+const thumbFailures = ref<Record<string, boolean>>({})
+
+function markThumbFailed(path: string) {
+  thumbFailures.value[path] = true
+}
+
+function cellShowsThumbnail(row: FileEntry): boolean {
+  return galleryMode.value && isImageEntry(row) && !thumbFailures.value[row.path]
+}
+
 function loadDir(p: string) {
   loading.value = true
   errorMsg.value = ''
   pathError.value = false
   entries.value = []
   hasMore.value = false
+  thumbFailures.value = {}
   const gen = ++loadGeneration
   FileService.ListDirPage(p, 0, PAGE_SIZE)
     .then((page) => {
@@ -200,6 +215,40 @@ const nativeDragOutSupported = supportsNativeDragOut()
 function nativeDragPathsForRow(row: FileEntry): string[] {
   if (isParentEntry(row)) return []
   return operationEntriesForEntry(row).map(entry => entry.path)
+}
+
+// 列表行与看图模式网格单元共用的交互属性：
+// 选中/裁剪/查找高亮 class、目录拖放目标标记、点击/双击/右键/拖拽行为。
+function entryCellProps(row: FileEntry): Record<string, unknown> {
+  return {
+    style: 'cursor: pointer',
+    class: [
+      hoveredFolderPath.value === row.path ? 'drag-target-folder' : '',
+      contextActivePath.value === row.path ? 'context-active-entry' : '',
+      currentRowKey.value === row.path ? 'current-entry' : '',
+      selectedPathSet.value.has(row.path) ? 'selected-entry' : '',
+      fileClipboard.cutPathSet.value.has(row.path) ? 'cut-entry' : '',
+      findModeActive.value && isFindModeMatchedEntry(row) ? 'find-mode-matched-entry' : '',
+      findModeActive.value && !isFindModeMatchedEntry(row) ? 'find-mode-unmatched-entry' : '',
+    ].filter(Boolean).join(' '),
+    'data-entry-key': row.path,
+    'data-folder-path': row.isDir && !isParentEntry(row) ? row.path : undefined,
+    'data-file-drop-target': row.isDir && !isParentEntry(row) ? true : undefined,
+    draggable: !isParentEntry(row) && !nativeDragOutSupported,
+    onDragstart: !nativeDragOutSupported ? (e: DragEvent) => onRowDragStart(e, row, nativeDragPathsForRow(row)) : undefined,
+    onDragend: !nativeDragOutSupported ? onRowDragEnd : undefined,
+    onPointerdown: nativeDragOutSupported ? (e: PointerEvent) => {
+      nativeDragOut.onPointerDown({ x: e.clientX, y: e.clientY }, nativeDragPathsForRow(row))
+    } : undefined,
+    onPointermove: nativeDragOutSupported ? (e: PointerEvent) => {
+      nativeDragOut.onPointerMove({ x: e.clientX, y: e.clientY })
+    } : undefined,
+    onPointerup: nativeDragOutSupported ? () => nativeDragOut.onPointerUp() : undefined,
+    onPointercancel: nativeDragOutSupported ? () => nativeDragOut.onPointerUp() : undefined,
+    onClick: (e: MouseEvent) => onRowClick(e, row),
+    onDblclick: () => onRowDblclick(row),
+    onContextmenu: (e: MouseEvent) => onRowContextMenu(e, row),
+  }
 }
 
 function onConfirm(action: 'move' | 'copy', conflict: 'overwrite' | 'skip' | 'rename') {
@@ -1156,6 +1205,13 @@ function setCurrentEntry(entry: FileEntry) {
 }
 
 function scrollCurrentEntryIntoView(path: string) {
+  if (galleryMode.value) {
+    nextTick(() => {
+      const cell = tableAreaRef.value?.querySelector(`[data-entry-key="${CSS.escape(path)}"]`)
+      cell?.scrollIntoView({ block: 'nearest' })
+    })
+    return
+  }
   const rowIndex = visibleEntries.value.findIndex(entry => entry.path === path)
   if (rowIndex < 0) return
   nextTick(() => {
@@ -1944,6 +2000,16 @@ useKeyboardShortcuts(() => shortcutActions, {
             <n-icon><ChecklistOutlined/></n-icon>
           </template>
         </NButton>
+        <NButton
+          text
+          :type="galleryMode ? 'primary' : 'default'"
+          title="看图模式"
+          @click="galleryMode = !galleryMode"
+        >
+          <template #icon>
+            <n-icon><GridDots28Regular/></n-icon>
+          </template>
+        </NButton>
         <NSpin v-if="hasMore" size="small" title="正在加载更多条目">
           <span class="hasmore-label">正在补齐…</span>
         </NSpin>
@@ -2006,41 +2072,14 @@ useKeyboardShortcuts(() => shortcutActions, {
       <NSpin v-else-if="loading" class="spin-fill" />
       <NDataTable
         ref="dataTableRef"
-        v-else-if="visibleEntries.length > 0"
+        v-else-if="!galleryMode && visibleEntries.length > 0"
         :columns="columns"
         :data="visibleEntries"
         :row-key="(row: FileEntry) => row.path"
         :checked-row-keys="selectedRowKeys"
         :on-update:checked-row-keys="onUpdateCheckedRowKeys"
         :on-update:sorter="onUpdateSorter"
-        :row-props="(row: FileEntry) => ({
-          style: 'cursor: pointer',
-          class: [
-            hoveredFolderPath === row.path ? 'drag-target-folder' : '',
-            contextActivePath === row.path ? 'context-active-entry' : '',
-            currentRowKey === row.path ? 'current-entry' : '',
-            selectedPathSet.has(row.path) ? 'selected-entry' : '',
-            cutPathSet.value.has(row.path) ? 'cut-entry' : '',
-            findModeActive && isFindModeMatchedEntry(row) ? 'find-mode-matched-entry' : '',
-            findModeActive && !isFindModeMatchedEntry(row) ? 'find-mode-unmatched-entry' : '',
-          ].filter(Boolean).join(' '),
-          'data-folder-path': row.isDir && !isParentEntry(row) ? row.path : undefined,
-          'data-file-drop-target': row.isDir && !isParentEntry(row) ? true : undefined,
-          draggable: !isParentEntry(row) && !nativeDragOutSupported,
-          onDragstart: !nativeDragOutSupported ? (e: DragEvent) => onRowDragStart(e, row, nativeDragPathsForRow(row)) : undefined,
-          onDragend: !nativeDragOutSupported ? onRowDragEnd : undefined,
-          onPointerdown: nativeDragOutSupported ? (e: PointerEvent) => {
-            nativeDragOut.onPointerDown({ x: e.clientX, y: e.clientY }, nativeDragPathsForRow(row))
-          } : undefined,
-          onPointermove: nativeDragOutSupported ? (e: PointerEvent) => {
-            nativeDragOut.onPointerMove({ x: e.clientX, y: e.clientY })
-          } : undefined,
-          onPointerup: nativeDragOutSupported ? () => nativeDragOut.onPointerUp() : undefined,
-          onPointercancel: nativeDragOutSupported ? () => nativeDragOut.onPointerUp() : undefined,
-          onClick: (e: MouseEvent) => onRowClick(e, row),
-          onDblclick: () => onRowDblclick(row),
-          onContextmenu: (e: MouseEvent) => onRowContextMenu(e, row),
-        })"
+        :row-props="(row: FileEntry) => entryCellProps(row)"
         :bordered="false"
         single-line
         size="small"
@@ -2049,6 +2088,38 @@ useKeyboardShortcuts(() => shortcutActions, {
         :virtual-scroll="true"
         class="data-table"
       />
+      <div
+        v-else-if="galleryMode && visibleEntries.length > 0"
+        class="thumb-grid"
+      >
+        <div
+          v-for="row in visibleEntries"
+          :key="row.path"
+          v-bind="entryCellProps(row)"
+          class="thumb-cell"
+        >
+          <div class="thumb-cell-visual">
+            <img
+              v-if="cellShowsThumbnail(row)"
+              class="thumb-image"
+              loading="lazy"
+              decoding="async"
+              :src="thumbnailUrl(row.path, THUMBNAIL_SIZE)"
+              :alt="row.name"
+              @error="markThumbFailed(row.path)"
+            />
+            <NIcon
+              v-else
+              class="thumb-icon"
+              :size="isParentEntry(row) ? 36 : 40"
+              :color="isParentEntry(row) ? 'var(--n-primary-color, #18a058)' : resolveFileIcon(row).color"
+            >
+              <component :is="isParentEntry(row) ? FolderArrowUp24Regular : resolveFileIcon(row).icon" />
+            </NIcon>
+          </div>
+          <span class="thumb-cell-name" :title="row.name">{{ row.name }}</span>
+        </div>
+      </div>
       <NEmpty v-else :description="searchQuery ? 'No matches' : 'Empty directory'" class="empty-fill" />
       <NDropdown
         trigger="manual"
@@ -2273,6 +2344,97 @@ useKeyboardShortcuts(() => shortcutActions, {
 
 :deep(.data-table .v-vl-items) {
   padding-bottom: var(--file-table-scroll-end-space) !important;
+}
+
+/* 看图模式（缩略图网格） */
+.thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+  padding: 8px;
+  align-content: start;
+}
+
+.thumb-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  min-width: 0;
+  user-select: none;
+}
+
+.thumb-cell:hover {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.06);
+}
+
+.thumb-cell-visual {
+  width: 100%;
+  height: 88px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.thumb-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.thumb-icon {
+  opacity: 0.9;
+}
+
+.thumb-cell-name {
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  word-break: break-all;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 网格单元状态视觉，与列表行保持一致 */
+.thumb-cell.selected-entry {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.14);
+}
+
+.thumb-cell.selected-entry:hover {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.18);
+}
+
+.thumb-cell.current-entry {
+  border-color: var(--n-primary-color, #18a058);
+}
+
+.thumb-cell.context-active-entry {
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.14);
+}
+
+.thumb-cell.cut-entry {
+  opacity: 0.45;
+}
+
+.thumb-cell.drag-target-folder {
+  outline: 2px solid var(--n-primary-color, #18a058);
+  outline-offset: -2px;
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.1);
+}
+
+.thumb-cell.find-mode-matched-entry {
+  background: rgba(255, 216, 77, 0.12);
+}
+
+.thumb-cell.find-mode-unmatched-entry {
+  opacity: 0.42;
 }
 
 .empty-fill {

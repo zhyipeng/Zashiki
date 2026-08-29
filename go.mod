@@ -5,7 +5,8 @@ go 1.25.0
 require (
 	github.com/adrg/xdg v0.5.3
 	github.com/wailsapp/wails/v3 v3.0.0-beta.12
-	golang.org/x/sys v0.46.0
+	golang.org/x/image v0.45.0
+	golang.org/x/sys v0.47.0
 )
 
 require (

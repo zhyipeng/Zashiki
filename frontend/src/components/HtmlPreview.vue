@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FilePreview } from '../../bindings/zashiki/internal/filemanager'
+import { htmlAssetUrl } from './assetUrl'
 
 const props = defineProps<{
   preview: FilePreview
@@ -43,25 +44,6 @@ function resolvePath(baseDir: string, refPath: string): string {
 }
 
 /**
- * Encode a local file path for the asset proxy URL.
- * Uses base64 URL encoding compatible with Go's base64.URLEncoding.
- */
-function encodeAssetUrl(localPath: string): string {
-  // Encode the path as UTF-8 bytes, then base64 URL-encode (with padding)
-  const utf8Bytes = new TextEncoder().encode(localPath)
-  // Convert bytes to binary string for btoa
-  let binaryString = ''
-  for (const byte of utf8Bytes) {
-    binaryString += String.fromCharCode(byte)
-  }
-  // base64 encode with URL-safe alphabet (replace + with -, / with _)
-  // Keep padding (=) since Go's URLEncoding expects it
-  let encoded = btoa(binaryString)
-  encoded = encoded.replace(/\+/g, '-').replace(/\//g, '_')
-  return `/__html_assets__/${encoded}`
-}
-
-/**
  * Rewrite HTML content to proxy local asset references through the asset middleware.
  */
 const processedHtml = computed(() => {
@@ -84,7 +66,7 @@ const processedHtml = computed(() => {
     }
 
     const absolutePath = resolvePath(baseDir, value)
-    const proxiedUrl = encodeAssetUrl(absolutePath)
+    const proxiedUrl = htmlAssetUrl(absolutePath)
     return `${attr}="${proxiedUrl}"`
   })
 
@@ -95,7 +77,7 @@ const processedHtml = computed(() => {
     }
 
     const absolutePath = resolvePath(baseDir, value)
-    const proxiedUrl = encodeAssetUrl(absolutePath)
+    const proxiedUrl = htmlAssetUrl(absolutePath)
     return `url("${proxiedUrl}")`
   })
 
