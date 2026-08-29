@@ -22,3 +22,7 @@ export function htmlAssetUrl(localPath: string): string {
 export function thumbnailUrl(localPath: string, size = 256): string {
   return `/__thumbnails__/${encodeAssetPath(localPath)}?s=${size}`
 }
+
+export function mediaAssetUrl(localPath: string): string {
+  return `/__media__/${encodeAssetPath(localPath)}`
+}

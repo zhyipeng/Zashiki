@@ -20,6 +20,14 @@ export const previewRenderers: PreviewRenderer[] = [
     label: '图片',
   },
   {
+    kind: 'audio',
+    label: '音频',
+  },
+  {
+    kind: 'video',
+    label: '视频',
+  },
+  {
     kind: 'html',
     label: 'HTML',
   },

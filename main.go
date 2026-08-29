@@ -100,16 +100,80 @@ func htmlAssetMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+const mediaPrefix = "/__media__/"
+
+// mediaMiddleware intercepts requests to /__media__/ and streams local
+// audio/video files to the WebView's native <audio>/<video> components.
+// http.ServeContent handles Range/If-Range so seeking works without loading
+// the whole file, and there is intentionally no size cap.
+func mediaMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		if !strings.HasPrefix(req.URL.Path, mediaPrefix) {
+			next.ServeHTTP(rw, req)
+			return
+		}
+
+		encodedPath := strings.TrimPrefix(req.URL.Path, mediaPrefix)
+		decodedPath, err := base64.URLEncoding.DecodeString(encodedPath)
+		if err != nil {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte("invalid path encoding"))
+			return
+		}
+		localPath := string(decodedPath)
+
+		// Security: only allow absolute paths and prevent traversal
+		if !filepath.IsAbs(localPath) {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte("path must be absolute"))
+			return
+		}
+		cleanPath := filepath.Clean(localPath)
+		if cleanPath != localPath {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte("path contains traversal"))
+			return
+		}
+
+		info, err := os.Stat(cleanPath)
+		if err != nil {
+			rw.WriteHeader(http.StatusNotFound)
+			rw.Write([]byte("file not found"))
+			return
+		}
+		if info.IsDir() {
+			rw.WriteHeader(http.StatusBadRequest)
+			rw.Write([]byte("path is a directory"))
+			return
+		}
+
+		file, err := os.Open(cleanPath)
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			rw.Write([]byte("failed to open file"))
+			return
+		}
+		defer file.Close()
+
+		mimeType := filemanager.MediaMimeType(strings.ToLower(filepath.Ext(cleanPath)))
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+		rw.Header().Set("Content-Type", mimeType)
+		http.ServeContent(rw, req, info.Name(), info.ModTime(), file)
+	})
+}
+
 const thumbnailPrefix = "/__thumbnails__/"
 
 // maxRawThumbnailFallbackBytes 限制无法解码格式的原样回退大小；
 // 超过该值的大图宁可 404 让前端显示图标，也不把整图塞进 WebView。
 const maxRawThumbnailFallbackBytes = 20 * 1024 * 1024
 
-// assetMiddleware 组合本地资源中间件：/__html_assets__/ 与 /__thumbnails__/
-// 各自拦截，其余请求交给内置资源服务器。
+// assetMiddleware 组合本地资源中间件：/__html_assets__/、/__thumbnails__/ 与
+// /__media__/ 各自拦截，其余请求交给内置资源服务器。
 func assetMiddleware(next http.Handler) http.Handler {
-	return htmlAssetMiddleware(thumbnailMiddleware(next))
+	return htmlAssetMiddleware(thumbnailMiddleware(mediaMiddleware(next)))
 }
 
 // thumbnailMiddleware intercepts requests to /__thumbnails__/{base64 path}?s={size}

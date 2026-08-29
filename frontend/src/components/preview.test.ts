@@ -8,8 +8,13 @@ describe('preview renderer registry', () => {
     expect(renderer.label).toBe('文本')
   })
 
+  it('resolves audio and video preview renderer kinds', () => {
+    expect(resolvePreviewRenderer({ kind: 'audio' } as any).label).toBe('音频')
+    expect(resolvePreviewRenderer({ kind: 'video' } as any).label).toBe('视频')
+  })
+
   it('falls back to unsupported renderer for unknown kinds', () => {
-    const renderer = resolvePreviewRenderer({ kind: 'video' } as any)
+    const renderer = resolvePreviewRenderer({ kind: 'hologram' } as any)
     expect(renderer.kind).toBe('unsupported')
   })
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { encodeAssetPath, htmlAssetUrl, thumbnailUrl } from './assetUrl'
+import { encodeAssetPath, htmlAssetUrl, mediaAssetUrl, thumbnailUrl } from './assetUrl'
 
 describe('encodeAssetPath', () => {
   it('produces base64url compatible with Go base64.URLEncoding', () => {
@@ -30,5 +30,9 @@ describe('asset urls', () => {
   it('builds thumbnail url with size query', () => {
     expect(thumbnailUrl('/tmp/a.png')).toBe(`/__thumbnails__/${encodeAssetPath('/tmp/a.png')}?s=256`)
     expect(thumbnailUrl('/tmp/a.png', 128)).toBe(`/__thumbnails__/${encodeAssetPath('/tmp/a.png')}?s=128`)
+  })
+
+  it('builds media asset url', () => {
+    expect(mediaAssetUrl('/tmp/a.mp4')).toBe(`/__media__/${encodeAssetPath('/tmp/a.mp4')}`)
   })
 })

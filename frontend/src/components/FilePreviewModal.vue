@@ -4,6 +4,7 @@ import { NAlert, NButton, NEmpty, NInput, NModal, NSpin, NSpace, NSwitch, NTag }
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
 import { formatPreviewSize, isFormattedJsonPreview, isHtmlPreview, isMarkdownPreview, isCodePreview, previewTextContent, resolvePreviewRenderer, resolveCodeLanguage } from './preview'
 import HtmlPreview from './HtmlPreview.vue'
+import MediaPreview from './MediaPreview.vue'
 import OfficePreview from './OfficePreview.vue'
 import PdfPreview from './PdfPreview.vue'
 
@@ -177,6 +178,10 @@ function saveEditFromKeyboard(event: KeyboardEvent) {
             :src="preview.dataUrl"
             :alt="preview.name"
           >
+          <MediaPreview
+            v-else-if="(renderer.kind === 'audio' || renderer.kind === 'video') && preview"
+            :preview="preview"
+          />
           <NInput
             v-else-if="renderer.kind === 'text' && editMode"
             v-model:value="draftContent"

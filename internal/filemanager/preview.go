@@ -36,6 +36,7 @@ type previewProvider interface {
 
 var filePreviewProviders = []previewProvider{
 	imagePreviewProvider{},
+	mediaPreviewProvider{},
 	officePreviewProvider{},
 	pdfPreviewProvider{},
 	htmlPreviewProvider{},
@@ -119,6 +120,27 @@ func (imagePreviewProvider) Build(ctx previewContext) (FilePreview, error) {
 	preview := baseFilePreview(ctx, "image")
 	preview.MimeType = mimeType
 	preview.DataURL = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
+	return preview, nil
+}
+
+// mediaPreviewProvider 匹配音频/视频文件。不读取文件内容——大文件由
+// /__media__/ 流式中间件按需提供给前端的原生 <audio>/<video> 组件播放。
+type mediaPreviewProvider struct{}
+
+func (mediaPreviewProvider) Match(ctx previewContext) bool {
+	return previewAudioMIMETypes[ctx.ext] != "" || previewVideoMIMETypes[ctx.ext] != ""
+}
+
+func (mediaPreviewProvider) Build(ctx previewContext) (FilePreview, error) {
+	mimeType := previewAudioMIMETypes[ctx.ext]
+	kind := "audio"
+	if mimeType == "" {
+		mimeType = previewVideoMIMETypes[ctx.ext]
+		kind = "video"
+	}
+
+	preview := baseFilePreview(ctx, kind)
+	preview.MimeType = mimeType
 	return preview, nil
 }
 
@@ -337,6 +359,64 @@ var previewOfficeMIMETypes = map[string]string{
 
 var previewPdfMIMETypes = map[string]string{
 	".pdf": "application/pdf",
+}
+
+// 与前端 fileIcons.ts 的 audioExtensions/videoExtensions 保持一致。
+// .ts 不在视频表内——它已映射为 TypeScript 文本文件。
+var previewAudioMIMETypes = map[string]string{
+	".aac":  "audio/aac",
+	".ac3":  "audio/ac3",
+	".aif":  "audio/aiff",
+	".aiff": "audio/aiff",
+	".amr":  "audio/amr",
+	".ape":  "audio/x-ape",
+	".caf":  "audio/x-caf",
+	".flac": "audio/flac",
+	".m4a":  "audio/mp4",
+	".mka":  "audio/x-matroska",
+	".mid":  "audio/midi",
+	".midi": "audio/midi",
+	".mp3":  "audio/mpeg",
+	".oga":  "audio/ogg",
+	".ogg":  "audio/ogg",
+	".opus": "audio/opus",
+	".ra":   "audio/x-pn-realaudio",
+	".wav":  "audio/wav",
+	".wma":  "audio/x-ms-wma",
+}
+
+var previewVideoMIMETypes = map[string]string{
+	".3g2":  "video/3gpp2",
+	".3gp":  "video/3gpp",
+	".asf":  "video/x-ms-asf",
+	".avi":  "video/x-msvideo",
+	".divx": "video/x-msvideo",
+	".f4v":  "video/mp4",
+	".flv":  "video/x-flv",
+	".m2ts": "video/mp2t",
+	".m4v":  "video/x-m4v",
+	".mkv":  "video/x-matroska",
+	".mov":  "video/quicktime",
+	".mp4":  "video/mp4",
+	".mpe":  "video/mpeg",
+	".mpeg": "video/mpeg",
+	".mpg":  "video/mpeg",
+	".mts":  "video/mp2t",
+	".ogv":  "video/ogg",
+	".rm":   "application/vnd.rn-realmedia",
+	".rmvb": "application/vnd.rn-realmedia-vbr",
+	".vob":  "video/mpeg",
+	".webm": "video/webm",
+	".wmv":  "video/x-ms-wmv",
+}
+
+// MediaMimeType 返回音视频扩展名对应的 MIME 类型，非音视频扩展名返回空串。
+// 供 /__media__/ 流式中间件与预览 provider 共用。
+func MediaMimeType(ext string) string {
+	if mimeType := previewAudioMIMETypes[ext]; mimeType != "" {
+		return mimeType
+	}
+	return previewVideoMIMETypes[ext]
 }
 
 var previewTextMIMETypes = map[string]string{

@@ -273,6 +273,97 @@ func TestFileService_GetFilePreview_PdfTooLarge(t *testing.T) {
 	}
 }
 
+func TestFileService_GetFilePreview_Media(t *testing.T) {
+	dir := t.TempDir()
+
+	tests := []struct {
+		name     string
+		ext      string
+		wantKind string
+		wantMime string
+	}{
+		{"mp3", ".mp3", "audio", "audio/mpeg"},
+		{"flac", ".flac", "audio", "audio/flac"},
+		{"m4a", ".m4a", "audio", "audio/mp4"},
+		{"ogg", ".ogg", "audio", "audio/ogg"},
+		{"mp4", ".mp4", "video", "video/mp4"},
+		{"mkv", ".mkv", "video", "video/x-matroska"},
+		{"webm", ".webm", "video", "video/webm"},
+		{"mov", ".mov", "video", "video/quicktime"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(dir, "file"+tt.ext)
+			// 任意二进制内容：媒体 provider 不解析内容，流式交给前端播放。
+			if err := os.WriteFile(path, []byte{0x00, 0x01, 0xff}, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			s := &FileService{}
+			preview, err := s.GetFilePreview(path)
+			if err != nil {
+				t.Fatalf("GetFilePreview() error = %v", err)
+			}
+
+			if preview.Kind != tt.wantKind {
+				t.Fatalf("Kind = %q, want %q", preview.Kind, tt.wantKind)
+			}
+			if preview.MimeType != tt.wantMime {
+				t.Fatalf("MimeType = %q, want %q", preview.MimeType, tt.wantMime)
+			}
+			if preview.DataURL != "" {
+				t.Fatal("DataURL should stay empty for streaming media preview")
+			}
+			if preview.Content != "" {
+				t.Fatal("Content should stay empty for media preview")
+			}
+		})
+	}
+}
+
+func TestFileService_GetFilePreview_MediaOversizedStillStreams(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "big.mp3")
+
+	// 媒体走流式播放，不受图片类 10MB 上限约束，也不读入内存。
+	data := make([]byte, maxImagePreviewBytes+1)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	preview, err := s.GetFilePreview(path)
+	if err != nil {
+		t.Fatalf("GetFilePreview() error = %v", err)
+	}
+
+	if preview.Kind != "audio" {
+		t.Fatalf("Kind = %q, want audio", preview.Kind)
+	}
+	if preview.DataURL != "" {
+		t.Fatal("DataURL should stay empty for streaming media preview")
+	}
+}
+
+func TestFileService_GetFilePreview_TypeScriptStaysText(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.ts")
+	if err := os.WriteFile(path, []byte("const x = 1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &FileService{}
+	preview, err := s.GetFilePreview(path)
+	if err != nil {
+		t.Fatalf("GetFilePreview() error = %v", err)
+	}
+
+	if preview.Kind != "text" {
+		t.Fatalf("Kind = %q, want text (.ts is TypeScript, not MPEG-TS)", preview.Kind)
+	}
+}
+
 func TestFileService_SaveTextPreviewRejectsChangedFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "note.txt")
