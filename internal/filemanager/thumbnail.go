@@ -90,10 +90,14 @@ func NormalizeThumbnailSize(size int) int {
 
 // GenerateThumbnail 生成 path 的 fit-in-box 缩略图（最长边 maxSize，保持宽高比）。
 // 原图尺寸不超过 maxSize 时直接返回原文件字节，避免无谓的重编码。
+// .exe 走内嵌图标提取（返回重组的 .ico 字节）。
 // 结果按 path+mtime+size+maxSize 做 LRU 缓存。
 func GenerateThumbnail(path string, maxSize int) (ThumbnailResult, error) {
 	maxSize = NormalizeThumbnailSize(maxSize)
 	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".exe" {
+		return generateExeIconThumbnail(path, maxSize)
+	}
 	mimeType := imageMimeType(ext)
 	if mimeType == "" {
 		return ThumbnailResult{}, ErrThumbnailUnsupported
@@ -120,6 +124,33 @@ func GenerateThumbnail(path string, maxSize int) (ThumbnailResult, error) {
 	if err != nil {
 		return ThumbnailResult{}, err
 	}
+	thumbnailCache.put(key, mtimeNs, info.Size(), result)
+	return result, nil
+}
+
+// generateExeIconThumbnail 提取 exe 内嵌图标，返回重组的 .ico 字节
+// （WebView 的 <img> 原生支持 ICO，按需自行选取尺寸）。提取失败返回普通
+// 错误而非 ErrThumbnailUnsupported——.exe 原始字节绝不能作为图片回退。
+func generateExeIconThumbnail(path string, maxSize int) (ThumbnailResult, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return ThumbnailResult{}, err
+	}
+	if info.IsDir() {
+		return ThumbnailResult{}, fmt.Errorf("cannot thumbnail directory %q", path)
+	}
+
+	mtimeNs := info.ModTime().UnixNano()
+	key := filepath.Clean(path) + "\x00" + strconv.Itoa(maxSize)
+	if cached, ok := thumbnailCache.get(key, mtimeNs, info.Size()); ok {
+		return cached, nil
+	}
+
+	data, err := ExtractExeIcon(path)
+	if err != nil {
+		return ThumbnailResult{}, err
+	}
+	result := ThumbnailResult{Data: data, MimeType: "image/x-icon"}
 	thumbnailCache.put(key, mtimeNs, info.Size(), result)
 	return result, nil
 }

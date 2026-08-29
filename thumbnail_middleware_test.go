@@ -98,6 +98,22 @@ func TestThumbnailMiddleware_NonImageNotFound(t *testing.T) {
 	}
 }
 
+func TestThumbnailMiddleware_ExeWithoutIconNotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.exe")
+	if err := os.WriteFile(path, []byte("not a pe file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := thumbnailRequest(t, path, "")
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (exe bytes must never be served to <img>)", recorder.Code)
+	}
+	if recorder.Body.String() == "not a pe file" {
+		t.Fatal("raw exe bytes must not be served as thumbnail fallback")
+	}
+}
+
 func TestThumbnailMiddleware_RejectsBadRequests(t *testing.T) {
 	dir := t.TempDir()
 

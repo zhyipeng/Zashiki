@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
-import { fileTypeLabel, isTextFile, resolveFileIcon } from './fileIcons'
+import { fileTypeLabel, isExeFile, isTextFile, resolveFileIcon } from './fileIcons'
 
 function entry(overrides: Partial<FileEntry>): FileEntry {
   return {
@@ -48,6 +48,25 @@ describe('isTextFile', () => {
     expect(isTextFile(entry({ name: 'README.md' }))).toBe(true)
     expect(isTextFile(entry({ name: 'archive.zip' }))).toBe(false)
     expect(isTextFile(entry({ name: 'notes.md', isDir: true }))).toBe(false)
+  })
+})
+
+describe('isExeFile', () => {
+  it('matches .exe files case-insensitively', () => {
+    expect(isExeFile(entry({ name: 'app.exe' }))).toBe(true)
+    expect(isExeFile(entry({ name: 'SETUP.EXE' }))).toBe(true)
+  })
+
+  it('rejects directories and other executable types without embedded icons', () => {
+    expect(isExeFile(entry({ name: 'app.exe', isDir: true }))).toBe(false)
+    expect(isExeFile(entry({ name: 'run.bat' }))).toBe(false)
+    expect(isExeFile(entry({ name: 'setup.msi' }))).toBe(false)
+    expect(isExeFile(entry({ name: 'photo.png' }))).toBe(false)
+  })
+
+  it('still resolves .exe to the executable icon group as fallback', () => {
+    // 后端在 Windows 上会把 .exe 标记为 isExecutable。
+    expect(resolveFileIcon(entry({ name: 'app.exe', isExecutable: true })).source).toBe('executable')
   })
 })
 

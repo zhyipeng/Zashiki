@@ -2,7 +2,6 @@
 import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NTree, NText, NSplit, NIcon, NDropdown, useMessage } from 'naive-ui'
 import type { DropdownOption, TreeOption } from 'naive-ui'
-import { DeleteOutlined, FolderOutlined, FolderSpecialOutlined } from '@vicons/material'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { useSettings } from '../composables/useSettings'
 import { FILE_EXPLORER_DRAG_MIME, activeDragPaths, activeDragSourcePanel, clearDrag, finishDragDrop, hasActiveDragPayload, hasActiveNativeDragPayload, startFileExplorerDrag } from '../composables/useDragDrop'
@@ -10,10 +9,12 @@ import { useDirectoryChangeListener } from '../composables/useDirectoryEvents'
 import { isQuickAccessDropTarget, openSystemDropConfirm, setSidebarSystemDropHandler } from '../composables/useSystemFileDrop'
 import type { SystemDropEvent } from '../composables/useSystemFileDrop'
 import { ancestorPaths, baseName, joinPath, pathRoot } from './path'
+import { resolveQuickAccessIcon } from './quickAccessIcons'
+import type { QuickAccessKind } from './quickAccessIcons'
 
 type RootInfo = { name: string, path: string, freeSpace: number, totalSpace: number }
 type TrashInfo = { label: string, path: string, available: boolean }
-type QuickAccessItem = { label: string, path: string, isTrash?: boolean, isPinned?: boolean }
+type QuickAccessItem = { label: string, path: string, kind?: QuickAccessKind, isTrash?: boolean, isPinned?: boolean }
 
 const { settings, updateSetting } = useSettings()
 const message = useMessage()
@@ -197,10 +198,10 @@ const quickAccess = computed(() => {
   const h = props.homeDir
   if (!h) return []
   const items: QuickAccessItem[] = [
-    { label: 'Home', path: h },
-    { label: 'Desktop', path: joinPath(h, 'Desktop', props.separator) },
-    { label: 'Documents', path: joinPath(h, 'Documents', props.separator) },
-    { label: 'Downloads', path: joinPath(h, 'Downloads', props.separator) },
+    { label: 'Home', path: h, kind: 'home' },
+    { label: 'Desktop', path: joinPath(h, 'Desktop', props.separator), kind: 'desktop' },
+    { label: 'Documents', path: joinPath(h, 'Documents', props.separator), kind: 'documents' },
+    { label: 'Downloads', path: joinPath(h, 'Downloads', props.separator), kind: 'downloads' },
   ]
   if (props.trashInfo.available) {
     items.push({ label: props.trashInfo.label || '回收站', path: props.trashInfo.path, isTrash: true })
@@ -500,8 +501,8 @@ function persistPinnedQuickAccess(paths: string[]) {
             @click="onQuickAccessClick(item)"
             @contextmenu.stop="showQuickAccessContextMenu($event, item)"
           >
-            <NIcon class="quick-icon" :size="16" :color="item.isPinned ? '#4B7BEC' : '#D99A22'">
-              <component :is="item.isTrash ? DeleteOutlined : item.isPinned ? FolderSpecialOutlined : FolderOutlined"/>
+            <NIcon class="quick-icon" :size="16" :color="resolveQuickAccessIcon(item).color">
+              <component :is="resolveQuickAccessIcon(item).icon"/>
             </NIcon>
             <span class="quick-label">{{ item.label }}</span>
           </div>

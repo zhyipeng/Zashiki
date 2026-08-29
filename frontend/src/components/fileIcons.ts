@@ -212,6 +212,12 @@ export function isTextFile(entry: FileEntry): boolean {
   return textExtensions.has(fileExtension(entry.name))
 }
 
+/** .exe 是唯一保证内嵌图标资源的可执行类型，可尝试展示提取出的真实图标。 */
+export function isExeFile(entry: FileEntry): boolean {
+  if (entry.isDir) return false
+  return fileExtension(entry.name) === '.exe'
+}
+
 export function fileExtension(name: string): string {
   const index = name.lastIndexOf('.')
   if (index <= 0 || index === name.length - 1) return ''

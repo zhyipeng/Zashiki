@@ -28,7 +28,7 @@ import { requestLanShare } from '../composables/useLanShare'
 import { useFileOperationHistory } from '../composables/useFileOperationHistory'
 import DropConfirmModal from './DropConfirmModal.vue'
 import FilePreviewModal from './FilePreviewModal.vue'
-import { fileTypeLabel, isTextFile, resolveFileIcon } from './fileIcons'
+import { fileTypeLabel, isExeFile, isTextFile, resolveFileIcon } from './fileIcons'
 import { isImageEntry, THUMBNAIL_SIZE } from './thumbnails'
 import { thumbnailUrl } from './assetUrl'
 import {
@@ -79,9 +79,15 @@ let loadGeneration = 0
 const galleryMode = ref(false)
 // 缩略图加载失败的路径集合，失败后回退为类型图标。
 const thumbFailures = ref<Record<string, boolean>>({})
+// exe 内嵌图标提取失败的路径集合，失败后回退为通用可执行图标。
+const exeIconFailures = ref<Record<string, boolean>>({})
 
 function markThumbFailed(path: string) {
   thumbFailures.value[path] = true
+}
+
+function markExeIconFailed(path: string) {
+  exeIconFailures.value[path] = true
 }
 
 function cellShowsThumbnail(row: FileEntry): boolean {
@@ -95,6 +101,7 @@ function loadDir(p: string) {
   entries.value = []
   hasMore.value = false
   thumbFailures.value = {}
+  exeIconFailures.value = {}
   const gen = ++loadGeneration
   FileService.ListDirPage(p, 0, PAGE_SIZE)
     .then((page) => {
@@ -998,15 +1005,31 @@ function createBaseColumns(): DataTableColumns<FileEntry> {
         const children: VNodeChild[] = []
         const findLabel = renderFindModeLabel(row)
         if (findLabel) children.push(findLabel)
-        children.push(
-          h(NIcon, {
-            class: 'file-icon',
-            color: fileIcon.color,
-            size: 18,
-            title: fileIcon.label,
-          }, { default: () => h(fileIcon.icon) }),
-          h('span', { class: 'file-name-text' }, row.name),
-        )
+        if (isExeFile(row) && !exeIconFailures.value[row.path]) {
+          children.push(
+            h('img', {
+              class: 'file-icon-img',
+              src: thumbnailUrl(row.path, 32),
+              alt: '',
+              title: fileIcon.label,
+              loading: 'lazy',
+              decoding: 'async',
+              onError: () => {
+                markExeIconFailed(row.path)
+              },
+            }),
+          )
+        } else {
+          children.push(
+            h(NIcon, {
+              class: 'file-icon',
+              color: fileIcon.color,
+              size: 18,
+              title: fileIcon.label,
+            }, { default: () => h(fileIcon.icon) }),
+          )
+        }
+        children.push(h('span', { class: 'file-name-text' }, row.name))
         return h('div', {
           class: [
             'file-name-cell',
@@ -2468,6 +2491,14 @@ useKeyboardShortcuts(() => shortcutActions, {
 }
 
 :deep(.file-icon svg) {
+  display: block;
+}
+
+:deep(.file-icon-img) {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
   display: block;
 }
 
