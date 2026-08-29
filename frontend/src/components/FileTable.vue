@@ -31,6 +31,8 @@ import FilePreviewModal from './FilePreviewModal.vue'
 import { fileTypeLabel, isExeFile, isTextFile, resolveFileIcon } from './fileIcons'
 import { isImageEntry, THUMBNAIL_SIZE } from './thumbnails'
 import { thumbnailUrl } from './assetUrl'
+import { applyMarqueeSelection, isMarqueeDrag, marqueeRect } from './galleryMarquee'
+import type { MarqueeItemRect, MarqueePoint, MarqueeRect } from './galleryMarquee'
 import {
   createFindModeTargets,
   exactFindModeLabelMatch,
@@ -111,6 +113,131 @@ function toggleThumbChecked(row: FileEntry) {
 
 function toggleThumbSelectAll(checked: boolean) {
   selectedRowKeys.value = checked ? thumbSelectableEntries.value.map(entry => entry.path) : []
+}
+
+// 看图模式鼠标框选：空白处按下拖出矩形选中相交条目，Ctrl 按住为切换语义。
+interface ThumbMarqueeState {
+  startPoint: MarqueePoint
+  lastClient: { x: number, y: number }
+  baseSelected: string[]
+  additive: boolean
+  items: MarqueeItemRect[]
+  active: boolean
+}
+const thumbGridRef = ref<HTMLElement | null>(null)
+let thumbMarquee: ThumbMarqueeState | null = null
+let thumbMarqueeRafId = 0
+const thumbMarqueeRect = ref<MarqueeRect | null>(null)
+const thumbMarqueeStyle = computed(() => {
+  const rect = thumbMarqueeRect.value
+  if (!rect) return {}
+  return {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.right - rect.left}px`,
+    height: `${rect.bottom - rect.top}px`,
+  }
+})
+
+function thumbContentPoint(client: { x: number, y: number }): MarqueePoint {
+  const el = thumbGridRef.value
+  if (!el) return { x: 0, y: 0 }
+  const rect = el.getBoundingClientRect()
+  return { x: client.x - rect.left + el.scrollLeft, y: client.y - rect.top + el.scrollTop }
+}
+
+function updateThumbMarqueeSelection() {
+  if (!thumbMarquee) return
+  const rect = marqueeRect(thumbMarquee.startPoint, thumbContentPoint(thumbMarquee.lastClient))
+  thumbMarqueeRect.value = rect
+  selectedRowKeys.value = applyMarqueeSelection(thumbMarquee.baseSelected, thumbMarquee.items, rect, thumbMarquee.additive)
+}
+
+function onThumbMarqueeStart(e: PointerEvent) {
+  if (e.button !== 0) return
+  const el = thumbGridRef.value
+  if (!el) return
+  const target = e.target as HTMLElement | null
+  if (target?.closest('.thumb-cell, .thumb-select-bar')) return
+  thumbMarquee = {
+    startPoint: thumbContentPoint({ x: e.clientX, y: e.clientY }),
+    lastClient: { x: e.clientX, y: e.clientY },
+    baseSelected: [...selectedRowKeys.value],
+    additive: e.ctrlKey || e.metaKey,
+    items: Array.from(el.querySelectorAll<HTMLElement>('.thumb-cell'))
+      .map(cell => ({
+        path: cell.getAttribute('data-entry-key') || '',
+        left: cell.offsetLeft,
+        top: cell.offsetTop,
+        width: cell.offsetWidth,
+        height: cell.offsetHeight,
+      }))
+      .filter(item => item.path),
+    active: false,
+  }
+  try {
+    el.setPointerCapture(e.pointerId)
+  } catch {
+    // 指针可能已失效（如自动化合成事件），忽略即可
+  }
+}
+
+function onThumbMarqueeMove(e: PointerEvent) {
+  if (!thumbMarquee) return
+  thumbMarquee.lastClient = { x: e.clientX, y: e.clientY }
+  if (!thumbMarquee.active) {
+    if (!isMarqueeDrag(thumbMarquee.startPoint, thumbContentPoint(thumbMarquee.lastClient))) return
+    thumbMarquee.active = true
+    startThumbMarqueeAutoScroll()
+  }
+  updateThumbMarqueeSelection()
+}
+
+function onThumbMarqueeEnd(e: PointerEvent) {
+  const state = thumbMarquee
+  if (!state) return
+  thumbMarquee = null
+  if (thumbMarqueeRafId) {
+    cancelAnimationFrame(thumbMarqueeRafId)
+    thumbMarqueeRafId = 0
+  }
+  thumbMarqueeRect.value = null
+  const el = thumbGridRef.value
+  if (el?.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId)
+  if (!state.active) {
+    // 空白处单击（未成框）：非 Ctrl 时清空选择
+    if (!state.additive) {
+      selectedRowKeys.value = []
+      currentRowKey.value = ''
+    }
+    return
+  }
+  if (selectedRowKeys.value.length > 1) {
+    multiSelectMode.value = true
+  } else if (selectedRowKeys.value.length === 1) {
+    currentRowKey.value = selectedRowKeys.value[0]
+  }
+}
+
+function startThumbMarqueeAutoScroll() {
+  const tick = () => {
+    if (!thumbMarquee?.active) return
+    const el = thumbGridRef.value
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const edge = 28
+      const speed = 12
+      let dy = 0
+      if (thumbMarquee.lastClient.y < rect.top + edge) dy = -speed
+      else if (thumbMarquee.lastClient.y > rect.bottom - edge) dy = speed
+      if (dy !== 0) {
+        el.scrollTop += dy
+        updateThumbMarqueeSelection()
+      }
+    }
+    thumbMarqueeRafId = requestAnimationFrame(tick)
+  }
+  thumbMarqueeRafId = requestAnimationFrame(tick)
 }
 
 function loadDir(p: string) {
@@ -2144,7 +2271,19 @@ useKeyboardShortcuts(() => shortcutActions, {
           </NCheckbox>
           <span class="thumb-select-count">已选 {{ selectedRowKeys.length }} 项</span>
         </div>
-        <div class="thumb-grid">
+        <div
+          ref="thumbGridRef"
+          class="thumb-grid"
+          @pointerdown="onThumbMarqueeStart"
+          @pointermove="onThumbMarqueeMove"
+          @pointerup="onThumbMarqueeEnd"
+          @pointercancel="onThumbMarqueeEnd"
+        >
+          <div
+            v-if="thumbMarqueeRect"
+            class="thumb-marquee"
+            :style="thumbMarqueeStyle"
+          />
           <div
             v-for="row in visibleEntries"
             :key="row.path"
@@ -2165,6 +2304,7 @@ useKeyboardShortcuts(() => shortcutActions, {
                 class="thumb-image"
                 loading="lazy"
                 decoding="async"
+                draggable="false"
                 :src="thumbnailUrl(row.path, THUMBNAIL_SIZE)"
                 :alt="row.name"
                 @error="markThumbFailed(row.path)"
@@ -2431,6 +2571,7 @@ useKeyboardShortcuts(() => shortcutActions, {
 }
 
 .thumb-grid {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -2439,6 +2580,14 @@ useKeyboardShortcuts(() => shortcutActions, {
   gap: 8px;
   padding: 8px;
   align-content: start;
+}
+
+.thumb-marquee {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid var(--n-primary-color, #18a058);
+  background: rgba(var(--n-primary-color-rgb, 24, 160, 88), 0.15);
+  pointer-events: none;
 }
 
 .thumb-cell {
