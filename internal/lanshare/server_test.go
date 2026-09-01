@@ -4,13 +4,16 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -98,6 +101,20 @@ func TestHandlePage(t *testing.T) {
 	}
 }
 
+func TestHandleDownloadScript(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	rec := doReq(t, srv, "GET", "/testtoken/download.js", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Errorf("content type %q, want javascript", ct)
+	}
+	if !strings.Contains(rec.Body.String(), "planRanges") {
+		t.Error("download script should contain the range planner")
+	}
+}
+
 func TestHandleDownload(t *testing.T) {
 	srv, sess, _ := newTestServer(t)
 	dir := t.TempDir()
@@ -133,6 +150,79 @@ func TestHandleDownload(t *testing.T) {
 		if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "image/png") {
 			t.Errorf("content type %q, want image/png", ct)
 		}
+		if rec.Header().Get("Accept-Ranges") != "bytes" {
+			t.Errorf("accept-ranges = %q, want bytes", rec.Header().Get("Accept-Ranges"))
+		}
+		if rec.Header().Get("ETag") == "" {
+			t.Error("download should include an ETag")
+		}
+	})
+
+	t.Run("head metadata", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodHead, "/testtoken/download/"+item.ID, nil)
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status %d, want 200", rec.Code)
+		}
+		if rec.Body.Len() != 0 {
+			t.Fatalf("HEAD body length = %d, want 0", rec.Body.Len())
+		}
+		if got := rec.Header().Get("Content-Length"); got != strconv.Itoa(len(content)) {
+			t.Errorf("content-length = %q, want %d", got, len(content))
+		}
+		if rec.Header().Get("ETag") == "" || rec.Header().Get("Last-Modified") == "" {
+			t.Error("HEAD should include validators")
+		}
+	})
+
+	t.Run("range download", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testtoken/download/"+item.ID, nil)
+		req.Header.Set("Range", "bytes=2-6")
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusPartialContent {
+			t.Fatalf("status %d, want 206", rec.Code)
+		}
+		if got, want := rec.Body.Bytes(), content[2:7]; !bytes.Equal(got, want) {
+			t.Errorf("range body = %q, want %q", got, want)
+		}
+		if got, want := rec.Header().Get("Content-Range"), "bytes 2-6/"+strconv.Itoa(len(content)); got != want {
+			t.Errorf("content-range = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("unsatisfiable range", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testtoken/download/"+item.ID, nil)
+		req.Header.Set("Range", "bytes=999-1000")
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusRequestedRangeNotSatisfiable {
+			t.Fatalf("status %d, want 416", rec.Code)
+		}
+	})
+
+	t.Run("if-match", func(t *testing.T) {
+		head := httptest.NewRecorder()
+		headReq := httptest.NewRequest(http.MethodHead, "/testtoken/download/"+item.ID, nil)
+		srv.routes().ServeHTTP(head, headReq)
+		etag := head.Header().Get("ETag")
+
+		badReq := httptest.NewRequest(http.MethodGet, "/testtoken/download/"+item.ID, nil)
+		badReq.Header.Set("If-Match", `"stale"`)
+		badRec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(badRec, badReq)
+		if badRec.Code != http.StatusPreconditionFailed {
+			t.Fatalf("stale If-Match status %d, want 412", badRec.Code)
+		}
+
+		goodReq := httptest.NewRequest(http.MethodGet, "/testtoken/download/"+item.ID, nil)
+		goodReq.Header.Set("If-Match", etag)
+		goodRec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(goodRec, goodReq)
+		if goodRec.Code != http.StatusOK {
+			t.Fatalf("matching If-Match status %d, want 200", goodRec.Code)
+		}
 	})
 
 	t.Run("inline preview", func(t *testing.T) {
@@ -148,6 +238,74 @@ func TestHandleDownload(t *testing.T) {
 			t.Errorf("status %d, want 404", rec.Code)
 		}
 	})
+}
+
+func TestConcurrentRangeDownloads(t *testing.T) {
+	srv, sess, _ := newTestServer(t)
+	dir := t.TempDir()
+	content := []byte(strings.Repeat("0123456789abcdef", 1024))
+	path := filepath.Join(dir, "large.bin")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	added, err := sess.addFiles([]string{path}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testServer := httptest.NewServer(srv.routes())
+	defer testServer.Close()
+
+	type result struct {
+		start int
+		data  []byte
+		err   error
+	}
+	const partSize = 4096
+	parts := (len(content) + partSize - 1) / partSize
+	results := make(chan result, parts)
+	var wg sync.WaitGroup
+	for i := 0; i < parts; i++ {
+		start := i * partSize
+		end := start + partSize - 1
+		if end >= len(content) {
+			end = len(content) - 1
+		}
+		wg.Add(1)
+		go func(start, end int) {
+			defer wg.Done()
+			req, err := http.NewRequest(http.MethodGet, testServer.URL+"/testtoken/download/"+added[0].ID, nil)
+			if err != nil {
+				results <- result{start: start, err: err}
+				return
+			}
+			req.Header.Set("Range", "bytes="+strconv.Itoa(start)+"-"+strconv.Itoa(end))
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				results <- result{start: start, err: err}
+				return
+			}
+			data, readErr := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusPartialContent && readErr == nil {
+				readErr = errors.New("expected partial content")
+			}
+			results <- result{start: start, data: data, err: readErr}
+		}(start, end)
+	}
+	wg.Wait()
+	close(results)
+
+	assembled := make([]byte, len(content))
+	for part := range results {
+		if part.err != nil {
+			t.Fatal(part.err)
+		}
+		copy(assembled[part.start:], part.data)
+	}
+	if !bytes.Equal(assembled, content) {
+		t.Fatal("concurrent ranges did not reconstruct the original file")
+	}
 }
 
 func TestHandleZip(t *testing.T) {

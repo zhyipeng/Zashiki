@@ -68,7 +68,9 @@ func (s *shareServer) routes() *http.ServeMux {
 	// "/x" to "/x/" for the {tok}/ subtree, which would mask auth failures.
 	mux.HandleFunc("GET /{tok}", s.auth(s.handlePage))
 	mux.HandleFunc("GET /{tok}/", s.auth(s.handlePage))
+	mux.HandleFunc("GET /{tok}/download.js", s.auth(s.handleDownloadScript))
 	mux.HandleFunc("GET /{tok}/items", s.auth(s.handleItems))
+	mux.HandleFunc("HEAD /{tok}/download/{id}", s.auth(s.handleDownload))
 	mux.HandleFunc("GET /{tok}/download/{id}", s.auth(s.handleDownload))
 	mux.HandleFunc("GET /{tok}/zip", s.auth(s.handleZip))
 	mux.HandleFunc("POST /{tok}/upload", s.auth(s.handleUpload))
@@ -111,6 +113,12 @@ func (s *shareServer) handlePage(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(receiverPageHTML))
 }
 
+func (s *shareServer) handleDownloadScript(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(receiverDownloadJS))
+}
+
 func (s *shareServer) handleItems(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, ItemsChanged{Items: s.sess.list()})
 }
@@ -139,6 +147,20 @@ func (c *countReader) Read(p []byte) (int, error) {
 type seekableCountReader struct {
 	f  *os.File
 	on func(int64)
+}
+
+func downloadETag(info os.FileInfo) string {
+	return fmt.Sprintf(`"%x-%x"`, info.Size(), info.ModTime().UnixNano())
+}
+
+func ifMatchMatches(value, etag string) bool {
+	for _, candidate := range strings.Split(value, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "*" || candidate == etag {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *seekableCountReader) Read(p []byte) (int, error) {
@@ -180,10 +202,22 @@ func (s *shareServer) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	etag := downloadETag(info)
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("ETag", etag)
+	if ifMatch := r.Header.Get("If-Match"); ifMatch != "" && !ifMatchMatches(ifMatch, etag) {
+		http.Error(w, "file changed", http.StatusPreconditionFailed)
+		return
+	}
+
 	if r.URL.Query().Get("preview") != "1" {
 		w.Header().Set("Content-Disposition", contentDisposition("attachment", item.Name))
 	}
 	w.Header().Set("Content-Type", item.MIMEType)
+	if r.Method == http.MethodHead {
+		http.ServeContent(w, r, item.Name, info.ModTime(), &seekableCountReader{f: f})
+		return
+	}
 
 	emitter := newTransferEmitter(TransferDirectionDownload, clientIP(r), item.Name, info.Size())
 	defer func() {

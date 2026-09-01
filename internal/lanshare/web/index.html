@@ -65,6 +65,13 @@
   .progress { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 6px; }
   .progress > div { height: 100%; background: var(--primary); width: 0; transition: width .2s; }
   .progress-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .download-task { padding: 10px 0; border-top: 1px solid var(--border); }
+  .download-task:first-child { border-top: none; }
+  .download-task-head { display: flex; align-items: center; gap: 8px; }
+  .download-task-name { flex: 1; min-width: 0; font-size: 13px; word-break: break-all; }
+  .download-task-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .download-task-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+  .download-task-actions button { padding: 5px 10px; font-size: 12px; }
   .tip { color: var(--muted); font-size: 12px; margin-top: 10px; text-align: center; }
 </style>
 </head>
@@ -78,6 +85,7 @@
   <div class="card">
     <h2>共享的文件 <button id="zip-all" class="ghost" style="display:none">全部下载</button></h2>
     <div id="file-list"><div class="empty">暂无共享文件</div></div>
+    <div id="download-progress"></div>
   </div>
 
   <div class="card">
@@ -100,11 +108,24 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+import {
+  completedBytes,
+  discardDownload,
+  listDownloadTasks,
+  planRanges,
+  startDownload,
+} from './download.js';
+
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var pollTimer = null;
+  var currentItems = [];
+  var storedTasks = [];
+  var downloadStates = Object.create(null);
+  var activeDownloads = Object.create(null);
+  var stateTimers = Object.create(null);
 
   function formatBytes(bytes) {
     if (bytes < 1024) return bytes + ' B';
@@ -121,7 +142,209 @@
     return node;
   }
 
+  function fileItem(itemId) {
+    return currentItems.find(function (item) { return item.id === itemId; }) || null;
+  }
+
+  function taskDoneBytes(task) {
+    var ranges = planRanges(task.size, task.chunkSize);
+    return completedBytes(ranges, task.completed || []);
+  }
+
+  function stateForStoredTask(task) {
+    var item = fileItem(task.itemId);
+    return {
+      id: task.itemId,
+      name: task.name,
+      item: item,
+      phase: 'paused',
+      doneBytes: taskDoneBytes(task),
+      totalBytes: task.size,
+      error: '',
+      retry: '',
+    };
+  }
+
+  function statePercent(state) {
+    if (state.phase === 'done') return 100;
+    if (!state.totalBytes) return 0;
+    return Math.min(100, Math.floor((state.doneBytes / state.totalBytes) * 100));
+  }
+
+  function stateText(state) {
+    if (state.phase === 'running') return state.retry || ('下载中 ' + statePercent(state) + '%');
+    if (state.phase === 'paused') return '已暂停，可继续';
+    if (state.phase === 'error') return state.error || '下载失败，可重试';
+    if (state.phase === 'native') return '已交给浏览器原生下载';
+    if (state.phase === 'done') return '完成';
+    return '';
+  }
+
+  function stateBytesText(state) {
+    if (!state.totalBytes) return '';
+    return formatBytes(state.doneBytes) + ' / ' + formatBytes(state.totalBytes);
+  }
+
+  function scheduleStateRemoval(id) {
+    if (stateTimers[id]) clearTimeout(stateTimers[id]);
+    stateTimers[id] = setTimeout(function () {
+      delete downloadStates[id];
+      delete stateTimers[id];
+      renderDownloadTasks();
+      renderItems(currentItems);
+    }, 8000);
+  }
+
+  function renderDownloadTasks() {
+    var box = $('download-progress');
+    box.textContent = '';
+    var byId = Object.create(null);
+    storedTasks.forEach(function (task) {
+      byId[task.itemId] = stateForStoredTask(task);
+    });
+    Object.keys(downloadStates).forEach(function (id) {
+      byId[id] = downloadStates[id];
+    });
+    var states = Object.keys(byId).map(function (id) { return byId[id]; });
+    if (states.length === 0) return;
+
+    var title = el('div', 'item-sub', '下载任务');
+    title.style.marginTop = '12px';
+    box.appendChild(title);
+    states.forEach(function (state) {
+      var entry = el('div', 'download-task');
+      var head = el('div', 'download-task-head');
+      head.appendChild(el('div', 'download-task-name', state.name));
+      entry.appendChild(head);
+
+      if (state.phase === 'running' || state.phase === 'paused' || state.phase === 'error') {
+        var progress = el('div', 'progress');
+        var inner = el('div');
+        inner.style.width = statePercent(state) + '%';
+        progress.appendChild(inner);
+        entry.appendChild(progress);
+      }
+
+      var meta = el('div', 'download-task-meta', stateText(state));
+      var bytes = stateBytesText(state);
+      if (bytes) meta.textContent += ' · ' + bytes;
+      entry.appendChild(meta);
+
+      var actions = el('div', 'download-task-actions');
+      if (state.phase === 'running') {
+        var cancel = el('button', 'ghost', '取消');
+        cancel.addEventListener('click', function () { cancelDownload(state.id); });
+        actions.appendChild(cancel);
+      } else if ((state.phase === 'paused' || state.phase === 'error') && state.item) {
+        var resume = el('button', '', state.phase === 'error' ? '重试' : '继续');
+        resume.addEventListener('click', function () { beginDownload(state.item); });
+        actions.appendChild(resume);
+      }
+      if (state.phase !== 'running' && state.phase !== 'native' && state.phase !== 'done') {
+        var clear = el('button', 'ghost', '清除');
+        clear.addEventListener('click', function () { clearDownload(state.id); });
+        actions.appendChild(clear);
+      }
+      if (actions.childNodes.length > 0) entry.appendChild(actions);
+      box.appendChild(entry);
+    });
+  }
+
+  function syncStoredTasks() {
+    return listDownloadTasks().then(function (tasks) {
+      storedTasks = tasks || [];
+      renderDownloadTasks();
+      renderItems(currentItems);
+    }).catch(function () {
+      storedTasks = [];
+    });
+  }
+
+  function beginDownload(item) {
+    if (!item || item.kind !== 'file' || activeDownloads[item.id]) return;
+    if (stateTimers[item.id]) {
+      clearTimeout(stateTimers[item.id]);
+      delete stateTimers[item.id];
+    }
+    downloadStates[item.id] = {
+      id: item.id,
+      name: item.name,
+      item: item,
+      phase: 'running',
+      doneBytes: 0,
+      totalBytes: item.size,
+      error: '',
+      retry: '',
+    };
+    renderDownloadTasks();
+    renderItems(currentItems);
+
+    var handle = startDownload(item, {
+      onRetry: function (info) {
+        var state = downloadStates[item.id];
+        if (!state) return;
+        state.retry = '正在重试分片 ' + (info.part.index + 1) + '（' + info.attempt + '/' + info.maxRetries + '）';
+        renderDownloadTasks();
+      },
+      onState: function (next) {
+        var state = downloadStates[item.id] || {
+          id: item.id, name: item.name, item: item, error: '', retry: ''
+        };
+        state.phase = next.phase || state.phase;
+        state.doneBytes = next.doneBytes ?? state.doneBytes ?? 0;
+        state.totalBytes = next.totalBytes ?? state.totalBytes ?? item.size;
+        state.error = next.error || '';
+        if (state.phase !== 'running') state.retry = '';
+        downloadStates[item.id] = state;
+        renderDownloadTasks();
+        renderItems(currentItems);
+      },
+    });
+    activeDownloads[item.id] = handle;
+    handle.promise.then(function (result) {
+      var state = downloadStates[item.id];
+      if (!state) return;
+      if (result && result.mode === 'native') {
+        state.phase = 'native';
+      } else {
+        state.phase = 'done';
+        state.doneBytes = state.totalBytes;
+      }
+      state.retry = '';
+      renderDownloadTasks();
+      renderItems(currentItems);
+      if (state.phase === 'done' || state.phase === 'native') scheduleStateRemoval(item.id);
+    }).catch(function (err) {
+      var state = downloadStates[item.id];
+      if (!state) return;
+      state.phase = err && err.code === 'cancelled' ? 'paused' : 'error';
+      state.error = err && err.message ? err.message : '下载失败';
+      state.retry = '';
+      renderDownloadTasks();
+      renderItems(currentItems);
+    }).finally(function () {
+      delete activeDownloads[item.id];
+      syncStoredTasks();
+    });
+  }
+
+  function cancelDownload(itemId) {
+    var handle = activeDownloads[itemId];
+    if (handle) handle.cancel();
+  }
+
+  function clearDownload(itemId) {
+    var handle = activeDownloads[itemId];
+    var stopped = handle ? handle.promise.catch(function () {}) : Promise.resolve();
+    if (handle) handle.cancel();
+    stopped.then(function () { return discardDownload(itemId); }).then(function () {
+      delete downloadStates[itemId];
+      syncStoredTasks();
+    }).catch(function () {});
+  }
+
   function renderItems(items) {
+    currentItems = items || [];
     var files = items.filter(function (it) { return it.kind === 'file'; });
     var texts = items.filter(function (it) { return it.kind === 'text'; });
 
@@ -145,14 +368,17 @@
       main.appendChild(el('div', 'item-name', item.name));
       main.appendChild(el('div', 'item-sub', formatBytes(item.size)));
       row.appendChild(main);
-      var btn = el('button', '', '下载');
+      var state = downloadStates[item.id];
+      var btn = el('button', '', state && state.phase === 'running' ? '下载中' : '下载');
+      btn.disabled = !!(state && state.phase === 'running');
       btn.addEventListener('click', function () {
-        location.href = 'download/' + encodeURIComponent(item.id);
+        beginDownload(item);
       });
       row.appendChild(btn);
       fileList.appendChild(row);
     });
     $('zip-all').style.display = files.length > 1 ? '' : 'none';
+    renderDownloadTasks();
 
     var textList = $('text-list');
     textList.textContent = '';
@@ -284,6 +510,7 @@
   bindText();
   bindZip();
   poll();
+  syncStoredTasks();
   pollTimer = setInterval(poll, 3000);
   window.addEventListener('beforeunload', function () { clearInterval(pollTimer); });
 })();
