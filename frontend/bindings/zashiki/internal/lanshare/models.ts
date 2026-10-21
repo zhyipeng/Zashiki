@@ -42,6 +42,7 @@ export class ServerStatus {
     "token"?: string;
     "urls": string[];
     "itemCount": number;
+    "accessCode": string;
 
     /** Creates a new ServerStatus instance. */
     constructor($$source: Partial<ServerStatus> = {}) {
@@ -56,6 +57,9 @@ export class ServerStatus {
         }
         if (!("itemCount" in $$source)) {
             this["itemCount"] = 0;
+        }
+        if (!("accessCode" in $$source)) {
+            this["accessCode"] = "";
         }
 
         Object.assign(this, $$source);

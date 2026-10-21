@@ -83,6 +83,14 @@ export function RemoveItem(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * SetAccessCode persists a custom URL path segment; empty restores random codes.
+ * Updating a running server keeps its port, shared items and active transfers.
+ */
+export function SetAccessCode(code: string): $CancellablePromise<void> {
+    return $Call.ByID(2639402055, code);
+}
+
+/**
  * SetPort persists the preferred port and restarts a running server on it
  * (falling back to ephemeral when busy). Shared items survive the restart.
  */

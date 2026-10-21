@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,8 +28,9 @@ var badAttemptDelay = 300 * time.Millisecond
 var errClientGone = errors.New("client disconnected")
 
 // shareServer is the LAN-facing HTTP server. It is created per start() with a
-// fresh token; all state lives in the session and the callbacks.
+// configured or random token; all state lives in the session and the callbacks.
 type shareServer struct {
+	tokenMu sync.RWMutex
 	sess    *session
 	token   string
 	port    int
@@ -98,7 +100,10 @@ func (s *shareServer) stop() error {
 func (s *shareServer) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tok := r.PathValue("tok")
-		if subtle.ConstantTimeCompare([]byte(tok), []byte(s.token)) != 1 {
+		s.tokenMu.RLock()
+		valid := subtle.ConstantTimeCompare([]byte(tok), []byte(s.token)) == 1
+		s.tokenMu.RUnlock()
+		if !valid {
 			time.Sleep(badAttemptDelay)
 			http.NotFound(w, r)
 			return
@@ -108,6 +113,13 @@ func (s *shareServer) auth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *shareServer) handlePage(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/"+r.PathValue("tok") {
+		target := *r.URL
+		target.Path += "/"
+		target.RawPath = ""
+		http.Redirect(w, r, target.RequestURI(), http.StatusTemporaryRedirect)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(receiverPageHTML))
@@ -426,4 +438,10 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+func (s *shareServer) setToken(token string) {
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
+	s.token = token
 }

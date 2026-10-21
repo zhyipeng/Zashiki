@@ -1,8 +1,11 @@
 package lanshare
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -219,5 +222,135 @@ func TestServiceShutdownStopsServer(t *testing.T) {
 	status, _ := svc.GetStatus()
 	if status.Running {
 		t.Error("server should be stopped after ServiceShutdown")
+	}
+}
+
+func TestAccessCodeValidationAndPersistence(t *testing.T) {
+	svc := newTestService(t, 0)
+	for _, code := range []string{"abc", "A_1-b", "", "a", strings.Repeat("a", 32)} {
+		if err := svc.SetAccessCode(code); err != nil {
+			t.Fatal(err)
+		}
+		reloaded := reloadServiceAt(svc.cfgDir)
+		status, _ := reloaded.GetStatus()
+		if status.AccessCode != code || status.Running {
+			t.Fatal("access code was not persisted without starting server")
+		}
+	}
+	for _, code := range []string{"a/b", "../abc", ".", "..", "a b", " abc", "abc\n", "中文", "abc?x", "abc#x", "%61", strings.Repeat("a", 33)} {
+		if err := svc.SetAccessCode(code); err == nil {
+			t.Errorf("accepted invalid code %q", code)
+		}
+		if svc.cfg.AccessCode != strings.Repeat("a", 32) {
+			t.Fatal("invalid input changed config")
+		}
+	}
+}
+
+func TestAccessCodeLiveUpdateAndReset(t *testing.T) {
+	svc := newTestService(t, 0)
+	t.Cleanup(func() { _ = svc.StopServer() })
+	if _, err := svc.AddText("shared text"); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := svc.GetStatus()
+	if err := svc.SetAccessCode("abc"); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := svc.GetStatus()
+	if after.Token != "abc" || after.Port != before.Port || after.ItemCount != 1 {
+		t.Fatal("live update lost server state")
+	}
+	for _, address := range after.URLs {
+		if !strings.HasSuffix(address, "/abc/") {
+			t.Fatal("candidate URL was not updated")
+		}
+	}
+	base := "http://127.0.0.1:" + strconv.Itoa(after.Port)
+	client := &http.Client{Timeout: 5 * time.Second}
+	for _, path := range []string{"/abc", "/abc/", "/abc/download.js", "/abc/items"} {
+		resp, err := client.Get(base + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("custom path %s returned %d", path, resp.StatusCode)
+		}
+	}
+	assertRejected := func(code string) {
+		t.Helper()
+		resp, err := client.Get(base + "/" + code + "/items")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatal("old access code still accepted")
+		}
+	}
+	assertRejected(before.Token)
+	if err := svc.SetAccessCode("abc"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.StopServer(); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := svc.EnsureServer()
+	if err != nil || restarted.Token != "abc" {
+		t.Fatal("restart did not retain custom code")
+	}
+	base = "http://127.0.0.1:" + strconv.Itoa(restarted.Port)
+	if err := svc.SetAccessCode(""); err != nil {
+		t.Fatal(err)
+	}
+	reset, _ := svc.GetStatus()
+	if reset.Token == "" || reset.Token == "abc" || reset.AccessCode != "" {
+		t.Fatal("random mode was not restored")
+	}
+	assertRejected("abc")
+	if err := svc.StopServer(); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err = svc.EnsureServer()
+	if err != nil || restarted.Token == reset.Token {
+		t.Fatal("random code was not rotated on restart")
+	}
+}
+
+func TestAccessCodeSaveFailurePreservesState(t *testing.T) {
+	svc := newTestService(t, 0)
+	if err := svc.SetAccessCode("abc"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EnsureServer(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.StopServer() })
+	blocked := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocked, []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	svc.cfgDir = blocked
+	if err := svc.SetAccessCode("new"); err == nil {
+		t.Fatal("expected persistence error")
+	}
+	status, _ := svc.GetStatus()
+	if status.AccessCode != "abc" || status.Token != "abc" {
+		t.Fatal("failed save changed live code")
+	}
+}
+
+func TestLoadInvalidAccessCode(t *testing.T) {
+	svc := newTestService(t, 0)
+	path, err := svc.configPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"accessCode":"../invalid"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if reloadServiceAt(svc.cfgDir).cfg.AccessCode != "" {
+		t.Fatal("invalid stored code should fall back to random")
 	}
 }

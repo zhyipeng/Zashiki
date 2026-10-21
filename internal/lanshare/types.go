@@ -70,9 +70,10 @@ type ItemsChanged struct {
 
 // ServerStatus describes the share server for the desktop UI.
 type ServerStatus struct {
-	Running   bool     `json:"running"`
-	Port      int      `json:"port"`
-	Token     string   `json:"token,omitempty"`
-	URLs      []string `json:"urls"`
-	ItemCount int      `json:"itemCount"`
+	Running    bool     `json:"running"`
+	Port       int      `json:"port"`
+	Token      string   `json:"token,omitempty"`
+	URLs       []string `json:"urls"`
+	ItemCount  int      `json:"itemCount"`
+	AccessCode string   `json:"accessCode"`
 }

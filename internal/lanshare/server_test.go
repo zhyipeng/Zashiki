@@ -529,3 +529,35 @@ func TestStopClearsSession(t *testing.T) {
 		t.Errorf("items after stop = %d, want 0", len(items))
 	}
 }
+
+func TestBareAccessCodeRedirectsAfterAuth(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	srv.setToken("abc")
+	rec := doReq(t, srv, "GET", "/abc?x=1", nil)
+	if rec.Code != http.StatusTemporaryRedirect || rec.Header().Get("Location") != "/abc/?x=1" {
+		t.Fatal("bare access code must redirect to page directory")
+	}
+	rec = doReq(t, srv, "GET", "/wrong", nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatal("invalid code must not redirect")
+	}
+}
+
+func TestAccessCodeConcurrentUpdates(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	handler := srv.routes()
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func() { defer wg.Done(); srv.setToken("abc") }()
+		go func() {
+			defer wg.Done()
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest("GET", "/abc/items", nil))
+			if rec.Code != http.StatusOK && rec.Code != http.StatusNotFound {
+				t.Error("unexpected auth response")
+			}
+		}()
+	}
+	wg.Wait()
+}

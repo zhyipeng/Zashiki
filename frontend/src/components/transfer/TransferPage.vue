@@ -14,6 +14,7 @@ import {
 import { FolderOpen20Regular, ClipboardPaste20Regular } from '@vicons/fluent'
 import { Dialogs, Clipboard } from '@wailsio/runtime'
 import { useLanShare, transferPercent } from '../../composables/useLanShare'
+import AccessCodeSettings from './AccessCodeSettings.vue'
 import { formatBytes } from '../../composables/useOperationProgress'
 import type { ShareItem } from '../../../bindings/zashiki/internal/lanshare/models'
 import type { TransferState } from '../../composables/useLanShare'
@@ -207,6 +208,11 @@ function friendlyError(err: unknown): string {
               </NButton>
             </template>
           </NEmpty>
+          <AccessCodeSettings
+            v-if="status"
+            :access-code="status.accessCode"
+            @saved="refreshStatus"
+          />
         </div>
 
         <div class="transfer-card">

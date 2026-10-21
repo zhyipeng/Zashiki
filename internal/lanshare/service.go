@@ -2,8 +2,10 @@ package lanshare
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -31,6 +33,7 @@ type LanShareService struct {
 type lanShareConfig struct {
 	Port       int    `json:"port"`
 	ReceiveDir string `json:"receiveDir"`
+	AccessCode string `json:"accessCode"`
 }
 
 func NewLanShareService() *LanShareService {
@@ -197,7 +200,10 @@ func (s *LanShareService) ensureServerLocked() error {
 }
 
 func (s *LanShareService) startServerLocked() error {
-	token := newShareToken()
+	token := s.cfg.AccessCode
+	if token == "" {
+		token = newShareToken()
+	}
 	srv := &shareServer{
 		sess:    s.sess,
 		token:   token,
@@ -215,8 +221,9 @@ func (s *LanShareService) startServerLocked() error {
 
 func (s *LanShareService) statusLocked() ServerStatus {
 	status := ServerStatus{
-		Port: s.cfg.Port,
-		URLs: []string{},
+		Port:       s.cfg.Port,
+		AccessCode: s.cfg.AccessCode,
+		URLs:       []string{},
 	}
 	if s.server != nil {
 		status.Running = true
@@ -273,6 +280,9 @@ func (s *LanShareService) loadConfig() lanShareConfig {
 		if stored.Port >= 1024 && stored.Port <= 65535 {
 			cfg.Port = stored.Port
 		}
+		if validAccessCode(stored.AccessCode) {
+			cfg.AccessCode = stored.AccessCode
+		}
 		if filepath.IsAbs(stored.ReceiveDir) {
 			cfg.ReceiveDir = filepath.Clean(stored.ReceiveDir)
 		}
@@ -305,4 +315,39 @@ func defaultReceiveDir() string {
 		return filepath.Join(os.TempDir(), "Zashiki")
 	}
 	return filepath.Join(base, "Zashiki")
+}
+
+var accessCodePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
+
+func validAccessCode(code string) bool {
+	return code == "" || accessCodePattern.MatchString(code)
+}
+
+// SetAccessCode persists a custom URL path segment; empty restores random codes.
+// Updating a running server keeps its port, shared items and active transfers.
+func (s *LanShareService) SetAccessCode(code string) error {
+	if !validAccessCode(code) {
+		return errors.New("访问码需为 1–32 位英文字母、数字、下划线或连字符，留空使用随机访问码")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cfg.AccessCode == code {
+		return nil
+	}
+	previous := s.cfg.AccessCode
+	s.cfg.AccessCode = code
+	if err := s.saveConfigLocked(); err != nil {
+		s.cfg.AccessCode = previous
+		return err
+	}
+	if s.server != nil {
+		token := code
+		if token == "" {
+			token = newShareToken()
+		}
+		s.server.setToken(token)
+		s.token = token
+	}
+	emitEvent(eventServerStatus, s.statusLocked())
+	return nil
 }
