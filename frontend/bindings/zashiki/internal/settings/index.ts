@@ -7,6 +7,7 @@ export {
 };
 
 export {
+    FileSortSettings,
     Settings,
     SyncToolSettings
 } from "./models.js";

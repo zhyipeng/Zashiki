@@ -30,6 +30,9 @@ vi.mock('../../bindings/zashiki/internal/nativefs', () => ({
   FileTransferService: { StartDrag: vi.fn(async () => 0) },
   ClipboardOperation: {},
 }))
+vi.mock('../../bindings/zashiki/internal/settings', () => ({
+  SettingsService: { SaveSettings: vi.fn(async () => {}) },
+}))
 vi.mock('./FilePreviewModal.vue', () => ({ default: { render: () => null } }))
 vi.mock('naive-ui', async (importOriginal) => ({
   ...await importOriginal<typeof import('naive-ui')>(),
@@ -38,10 +41,12 @@ vi.mock('naive-ui', async (importOriginal) => ({
 
 import FileTable from './FileTable.vue'
 import { FileTransferService } from '../../bindings/zashiki/internal/nativefs'
+import { SettingsService } from '../../bindings/zashiki/internal/settings'
+import { useSettings } from '../composables/useSettings'
 
 // 保留行事件及受控选择接口，避免虚拟列表依赖浏览器布局。
 const DataTable = defineComponent({
-  props: ['data', 'rowProps', 'checkedRowKeys', 'columns', 'onUpdate:checkedRowKeys'],
+  props: ['data', 'rowProps', 'checkedRowKeys', 'columns', 'onUpdate:checkedRowKeys', 'onUpdate:sorter'],
   setup(props) {
     return () => h('table', props.data.map((row: FileEntry) => h('tr', props.rowProps(row), [
       h('td', row.name),
@@ -70,6 +75,7 @@ afterEach(async () => {
   wrapper = undefined
   if (dir) await rm(dir, { recursive: true, force: true })
   dir = ''
+  useSettings().updateSetting('fileSort', { columnKey: '', order: '' })
   ;(window as any)._wails = originalWails
   vi.clearAllMocks()
 })
@@ -96,6 +102,35 @@ async function pointer(target: { element: Element }, type: string, x: number) {
 function status() {
   return wrapper!.emitted('selectionStatus')!.at(-1)![0]
 }
+
+it('恢复排序，在切换目录和重新挂载后保留，并可持久化取消排序', async () => {
+  useSettings().updateSetting('fileSort', { columnKey: 'name', order: 'descend' })
+  const view = await setup('darwin')
+  const table = () => view.findComponent(DataTable)
+  const names = () => table().props('data').filter((row: FileEntry) => !row.path.startsWith('__zashiki_parent__:')).map((row: FileEntry) => row.name)
+  expect(names()).toEqual(['b.txt', 'a.txt'])
+  expect(table().props('columns').find((column: { key: string }) => column.key === 'name').sortOrder).toBe('descend')
+
+  table().props('onUpdate:sorter')({ columnKey: 'name', order: 'ascend' })
+  await nextTick()
+  expect(names()).toEqual(['a.txt', 'b.txt'])
+  expect(SettingsService.SaveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ fileSort: { columnKey: 'name', order: 'ascend' } }))
+
+  const otherDir = await mkdtemp(join(dir, 'other-'))
+  await Promise.all(['d.txt', 'c.txt'].map(name => writeFile(join(otherDir, name), '')))
+  await view.setProps({ path: otherDir })
+  await vi.waitFor(() => expect(names()).toEqual(['c.txt', 'd.txt']))
+  view.unmount()
+  wrapper = mount(FileTable, {
+    props: { path: otherDir, separator: '/', homeDir: dir },
+    global: { stubs: { NDataTable: DataTable, DataTable } },
+  })
+  await vi.waitFor(() => expect(wrapper!.findComponent(DataTable).props('data').some((row: FileEntry) => row.name === 'c.txt')).toBe(true))
+  expect(wrapper.findComponent(DataTable).props('columns').find((column: { key: string }) => column.key === 'name').sortOrder).toBe('ascend')
+  wrapper.findComponent(DataTable).props('onUpdate:sorter')({ columnKey: 'name', order: false })
+  await nextTick()
+  expect(SettingsService.SaveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ fileSort: { columnKey: '', order: '' } }))
+})
 
 describe.each(['darwin', 'windows', 'linux'])('列表多选（%s）', (os) => {
   it('点击未选中的行可累计选择，再次点击可取消选择', async () => {

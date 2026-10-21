@@ -14,7 +14,7 @@ import { FileTransferService, ClipboardOperation } from '../../bindings/zashiki/
 import type { FileEntry, FilePreview } from '../../bindings/zashiki/internal/filemanager'
 import { CloseSharp, ArrowBackRound, ArrowForwardRound, RefreshSharp, ChecklistOutlined, SearchOutlined, UndoSharp, RedoSharp } from '@vicons/material'
 import { SplitVertical28Regular, SplitHorizontal28Regular, FolderArrowUp24Regular, Home28Regular, GridDots28Regular } from '@vicons/fluent'
-import { useSettings } from '../composables/useSettings'
+import { normalizeFileSortSettings, useSettings } from '../composables/useSettings'
 import { clearDrag, startNativeFileExplorerDrag, useDragDrop } from '../composables/useDragDrop'
 import { useSystemFileDrop } from '../composables/useSystemFileDrop'
 import { createNativeDragOut, supportsNativeDragOut } from '../composables/nativeDragOut'
@@ -44,7 +44,7 @@ import { pageEntryOffset, navigationMouseAction } from './fileTableNavigation'
 import { nextPageRange, shouldContinueFetch } from './dirPaging'
 import { joinPath, parentPath as getParentPath } from './path'
 
-const { settings } = useSettings()
+const { settings, updateSetting } = useSettings()
 const message = useMessage()
 const parentEntryPathPrefix = '__zashiki_parent__:'
 const shortcutScopeId = nextFileTableShortcutScopeId++
@@ -445,7 +445,7 @@ const currentRowKey = ref('')
 const findModeActive = ref(false)
 const findModeQuery = ref('')
 const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
-const sortState = ref<DataTableSortState | null>(null)
+const sortState = computed(() => settings.fileSort)
 const trashLabel = computed(() => props.trashLabel || '回收站')
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
 type ContextActionKey = 'new-folder' | 'open-terminal' | 'open-in-file-manager' | 'paste' | 'refresh' | 'open' | 'open-with-editor' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete' | 'lan-share'
@@ -792,11 +792,11 @@ function sortEntries(source: FileEntry[]): FileEntry[] {
 }
 
 function sortOrderFor(columnKey: string) {
-  return sortState.value?.columnKey === columnKey ? sortState.value.order : false
+  return sortState.value.columnKey === columnKey ? sortState.value.order || false : false
 }
 
 function onUpdateSorter(state: DataTableSortState | DataTableSortState[] | null) {
-  sortState.value = Array.isArray(state) ? state[0] || null : state
+  updateSetting('fileSort', normalizeFileSortSettings(Array.isArray(state) ? state[0] : state))
 }
 
 function isParentEntry(row: FileEntry): boolean {

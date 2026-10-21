@@ -12,6 +12,53 @@ func newTestService(t *testing.T) *SettingsService {
 	return &SettingsService{cfgDir: t.TempDir()}
 }
 
+func TestSettingsService_FileSortSurvivesRestart(t *testing.T) {
+	for _, column := range []string{"name", "type", "size", "modTime"} {
+		for _, order := range []string{"ascend", "descend"} {
+			t.Run(column+"/"+order, func(t *testing.T) {
+				svc := newTestService(t)
+				want := FileSortSettings{ColumnKey: column, Order: order}
+				if err := svc.SaveSettings(Settings{FileSort: want}); err != nil {
+					t.Fatal(err)
+				}
+				restarted := &SettingsService{cfgDir: svc.cfgDir}
+				got, err := restarted.GetSettings()
+				if err != nil || got.FileSort != want {
+					t.Fatalf("got %+v, %v; want %+v", got.FileSort, err, want)
+				}
+				if err := restarted.SaveSettings(Settings{}); err != nil {
+					t.Fatal(err)
+				}
+				got, err = svc.GetSettings()
+				if err != nil || got.FileSort != (FileSortSettings{}) {
+					t.Fatalf("cleared sort = %+v, %v", got.FileSort, err)
+				}
+			})
+		}
+	}
+}
+
+func TestSettingsService_FileSortFallback(t *testing.T) {
+	for _, config := range []string{
+		`{"themeMode":"dark"}`,
+		`{"themeMode":"dark","fileSort":{"columnKey":"unknown","order":"ascend"}}`,
+		`{"themeMode":"dark","fileSort":{"columnKey":"name","order":"invalid"}}`,
+	} {
+		svc := newTestService(t)
+		path, err := svc.configPath()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(config), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := svc.GetSettings()
+		if err != nil || got.FileSort != (FileSortSettings{}) || got.ThemeMode != "dark" {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+	}
+}
+
 func TestSettingsService_GetSettings_Default(t *testing.T) {
 	svc := newTestService(t)
 	settings, err := svc.GetSettings()

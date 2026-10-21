@@ -27,6 +27,12 @@ type Settings struct {
 	DefaultEditor          string           `json:"defaultEditor"`
 	PinnedQuickAccessPaths []string         `json:"pinnedQuickAccessPaths"`
 	SyncTool               SyncToolSettings `json:"syncTool"`
+	FileSort               FileSortSettings `json:"fileSort"`
+}
+
+type FileSortSettings struct {
+	ColumnKey string `json:"columnKey"`
+	Order     string `json:"order"`
 }
 
 type SettingsService struct {
@@ -82,6 +88,7 @@ func (s *SettingsService) GetSettings() (Settings, error) {
 		settings.ThemeMode = defaultSettings().ThemeMode
 	}
 	settings.SyncTool = normalizeSyncToolSettings(settings.SyncTool)
+	settings.FileSort = normalizeFileSortSettings(settings.FileSort)
 	return settings, nil
 }
 
@@ -94,6 +101,7 @@ func (s *SettingsService) SaveSettings(settings Settings) error {
 		return err
 	}
 
+	settings.FileSort = normalizeFileSortSettings(settings.FileSort)
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err
@@ -132,4 +140,16 @@ func normalizeSyncToolSettings(syncTool SyncToolSettings) SyncToolSettings {
 		syncTool.IgnorePatterns = []string{}
 	}
 	return syncTool
+}
+
+func normalizeFileSortSettings(sort FileSortSettings) FileSortSettings {
+	if sort.Order != "ascend" && sort.Order != "descend" {
+		return FileSortSettings{}
+	}
+	switch sort.ColumnKey {
+	case "name", "type", "size", "modTime":
+		return sort
+	default:
+		return FileSortSettings{}
+	}
 }

@@ -5,6 +5,31 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+export class FileSortSettings {
+    "columnKey": string;
+    "order": string;
+
+    /** Creates a new FileSortSettings instance. */
+    constructor($$source: Partial<FileSortSettings> = {}) {
+        if (!("columnKey" in $$source)) {
+            this["columnKey"] = "";
+        }
+        if (!("order" in $$source)) {
+            this["order"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FileSortSettings instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FileSortSettings {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FileSortSettings($$parsedSource as Partial<FileSortSettings>);
+    }
+}
+
 export class Settings {
     "showHiddenFiles": boolean;
     "themeMode": string;
@@ -12,6 +37,7 @@ export class Settings {
     "defaultEditor": string;
     "pinnedQuickAccessPaths": string[];
     "syncTool": SyncToolSettings;
+    "fileSort": FileSortSettings;
 
     /** Creates a new Settings instance. */
     constructor($$source: Partial<Settings> = {}) {
@@ -33,6 +59,9 @@ export class Settings {
         if (!("syncTool" in $$source)) {
             this["syncTool"] = (new SyncToolSettings());
         }
+        if (!("fileSort" in $$source)) {
+            this["fileSort"] = (new FileSortSettings());
+        }
 
         Object.assign(this, $$source);
     }
@@ -43,12 +72,16 @@ export class Settings {
     static createFrom($$source: any = {}): Settings {
         const $$createField4_0 = $$createType0;
         const $$createField5_0 = $$createType1;
+        const $$createField6_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("pinnedQuickAccessPaths" in $$parsedSource) {
             $$parsedSource["pinnedQuickAccessPaths"] = $$createField4_0($$parsedSource["pinnedQuickAccessPaths"]);
         }
         if ("syncTool" in $$parsedSource) {
             $$parsedSource["syncTool"] = $$createField5_0($$parsedSource["syncTool"]);
+        }
+        if ("fileSort" in $$parsedSource) {
+            $$parsedSource["fileSort"] = $$createField6_0($$parsedSource["fileSort"]);
         }
         return new Settings($$parsedSource as Partial<Settings>);
     }
@@ -110,3 +143,4 @@ export class SyncToolSettings {
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = SyncToolSettings.createFrom;
+const $$createType2 = FileSortSettings.createFrom;

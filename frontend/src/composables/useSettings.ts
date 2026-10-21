@@ -3,6 +3,20 @@ import { SettingsService } from '../../bindings/zashiki/internal/settings'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
+export interface FileSortSettings {
+  columnKey: string
+  order: '' | 'ascend' | 'descend'
+}
+
+export function normalizeFileSortSettings(value: unknown): FileSortSettings {
+  const raw = value as Partial<FileSortSettings> | null | undefined
+  if (raw && ['name', 'type', 'size', 'modTime'].includes(raw.columnKey || '')
+    && (raw.order === 'ascend' || raw.order === 'descend')) {
+    return { columnKey: raw.columnKey!, order: raw.order }
+  }
+  return { columnKey: '', order: '' }
+}
+
 export interface SyncToolSettings {
   sourceDir: string
   targetDir: string
@@ -21,6 +35,7 @@ export interface Settings {
   defaultEditor: string
   pinnedQuickAccessPaths: string[]
   syncTool: SyncToolSettings
+  fileSort: FileSortSettings
 }
 
 function defaultSyncToolSettings(): SyncToolSettings {
@@ -67,6 +82,7 @@ const state = reactive<Settings>({
   defaultEditor: '',
   pinnedQuickAccessPaths: [],
   syncTool: defaultSyncToolSettings(),
+  fileSort: normalizeFileSortSettings(null),
 })
 
 const loaded = ref(false)
@@ -84,6 +100,7 @@ export function initSettings(): Promise<void> {
       ? settings.pinnedQuickAccessPaths.filter((path): path is string => typeof path === 'string' && path.length > 0)
       : []
     state.syncTool = normalizeSyncToolSettings(settings.syncTool)
+    state.fileSort = normalizeFileSortSettings(settings.fileSort)
     loaded.value = true
   }).catch((err) => {
     console.error('Failed to load settings:', err)
