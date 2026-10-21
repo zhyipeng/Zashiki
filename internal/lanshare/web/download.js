@@ -69,6 +69,13 @@ export function shouldUseChunkedDownload(size, options = {}) {
   return indexedDBAvailable && Number.isSafeInteger(size) && size > 0 && size <= maxSize
 }
 
+export function downloadModeLabel(mode, parallelism = 0) {
+  if (mode === 'native') return '浏览器原生下载'
+  if (mode === 'chunked' && parallelism > 1) return `并发分片 · ${parallelism} 路`
+  if (mode === 'chunked') return 'Range 分片 · 1 路'
+  return '检测中'
+}
+
 export function isRetryableStatus(status) {
   return status === 408 || status === 425 || status === 429 || status >= 500
 }
@@ -346,7 +353,13 @@ async function triggerBlobDownload(item, ranges, task, hooks) {
   anchor.click()
   anchor.remove()
   setTimeout(() => URL.revokeObjectURL(url), 30_000)
-  hooks.onState?.({ phase: 'done', doneBytes: task.size, totalBytes: task.size })
+  hooks.onState?.({
+    phase: 'done',
+    mode: 'chunked',
+    parallelism: task.parallelism || 1,
+    doneBytes: task.size,
+    totalBytes: task.size,
+  })
   return blob
 }
 
@@ -361,7 +374,7 @@ async function runDownload(item, hooks, options, signal) {
     indexedDBAvailable: typeof indexedDB !== 'undefined',
   })) {
     startNativeDownload(item.id, options)
-    hooks.onState?.({ phase: 'native', doneBytes: 0, totalBytes: metadata.size })
+    hooks.onState?.({ phase: 'native', mode: 'native', doneBytes: 0, totalBytes: metadata.size })
     return { mode: 'native', size: metadata.size }
   }
 
@@ -395,15 +408,18 @@ async function runDownload(item, hooks, options, signal) {
   if (!(await storageHasRoom(remainingBytes))) {
     await deleteTaskRecord(task)
     startNativeDownload(item.id, options)
-    hooks.onState?.({ phase: 'native', doneBytes: 0, totalBytes: metadata.size })
+    hooks.onState?.({ phase: 'native', mode: 'native', doneBytes: 0, totalBytes: metadata.size })
     return { mode: 'native', size: metadata.size }
   }
 
   task.completed = Array.from(completed).sort((a, b) => a - b)
+  task.parallelism = Math.min(concurrency, ranges.length)
   task.updatedAt = Date.now()
   await putTask(task)
   hooks.onState?.({
     phase: 'running',
+    mode: 'chunked',
+    parallelism: task.parallelism,
     doneBytes: completedBytes(ranges, completed),
     totalBytes: metadata.size,
     completedParts: completed.size,
@@ -436,6 +452,8 @@ async function runDownload(item, hooks, options, signal) {
       await persistPart(part, blob)
       hooks.onState?.({
         phase: 'running',
+        mode: 'chunked',
+        parallelism: task.parallelism,
         doneBytes: completedBytes(ranges, completed),
         totalBytes: metadata.size,
         completedParts: completed.size,
@@ -462,7 +480,7 @@ export function startDownload(item, hooks = {}, options = {}) {
         const task = await getTask(taskKeyForItem(item.id, options.scope)).catch(() => null)
         await deleteTaskRecord(task).catch(() => {})
         startNativeDownload(item.id, options)
-        hooks.onState?.({ phase: 'native', doneBytes: 0, totalBytes: item.size })
+        hooks.onState?.({ phase: 'native', mode: 'native', doneBytes: 0, totalBytes: item.size })
         return { mode: 'native', size: item.size }
       }
       hooks.onState?.({ phase: err?.code === 'cancelled' ? 'paused' : 'error', error: err?.message || '下载失败' })

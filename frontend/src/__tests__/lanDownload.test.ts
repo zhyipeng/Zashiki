@@ -7,6 +7,7 @@ import {
   DOWNLOAD_MAX_CHUNKED_SIZE,
   basename,
   completedBytes,
+  downloadModeLabel,
   fetchPart,
   isRetryableStatus,
   parseContentRange,
@@ -108,5 +109,12 @@ describe('LAN download fallback policy', () => {
     expect(basename('目录\\文件.txt')).toBe('文件.txt')
     expect(basename('目录/文件.txt')).toBe('文件.txt')
     expect(basename('')).toBe('download')
+  })
+
+  it('labels the actual download mode without overstating concurrency', () => {
+    expect(downloadModeLabel('chunked', 4)).toBe('并发分片 · 4 路')
+    expect(downloadModeLabel('chunked', 1)).toBe('Range 分片 · 1 路')
+    expect(downloadModeLabel('native')).toBe('浏览器原生下载')
+    expect(downloadModeLabel('unknown')).toBe('检测中')
   })
 })

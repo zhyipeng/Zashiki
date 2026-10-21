@@ -367,7 +367,10 @@ const nativeDragOutSupported = supportsNativeDragOut()
 // 拖拽开始时快照路径（与选中状态一致；parent 行不可拖拽）
 function nativeDragPathsForRow(row: FileEntry): string[] {
   if (isParentEntry(row)) return []
-  return operationEntriesForEntry(row).map(entry => entry.path)
+  if (multiSelectMode.value && selectedPathSet.value.has(row.path)) {
+    return selectedEntries().map(entry => entry.path)
+  }
+  return [row.path]
 }
 
 // 列表行与看图模式网格单元共用的交互属性：

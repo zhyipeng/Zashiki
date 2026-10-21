@@ -69,6 +69,10 @@
   .download-task:first-child { border-top: none; }
   .download-task-head { display: flex; align-items: center; gap: 8px; }
   .download-task-name { flex: 1; min-width: 0; font-size: 13px; word-break: break-all; }
+  .download-task-mode { flex-shrink: 0; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 11px; white-space: nowrap; }
+  .download-task-mode.chunked { color: var(--primary); border-color: var(--primary); }
+  .download-task-mode.native { color: var(--muted); }
+  .download-task-mode.unknown { color: var(--muted); }
   .download-task-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
   .download-task-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
   .download-task-actions button { padding: 5px 10px; font-size: 12px; }
@@ -112,6 +116,7 @@
 import {
   completedBytes,
   discardDownload,
+  downloadModeLabel,
   listDownloadTasks,
   planRanges,
   startDownload,
@@ -158,6 +163,8 @@ import {
       name: task.name,
       item: item,
       phase: 'paused',
+      mode: 'chunked',
+      parallelism: task.parallelism || Math.min(4, task.parts || 1),
       doneBytes: taskDoneBytes(task),
       totalBytes: task.size,
       error: '',
@@ -183,6 +190,10 @@ import {
   function stateBytesText(state) {
     if (!state.totalBytes) return '';
     return formatBytes(state.doneBytes) + ' / ' + formatBytes(state.totalBytes);
+  }
+
+  function stateModeText(state) {
+    return downloadModeLabel(state.mode, state.parallelism);
   }
 
   function scheduleStateRemoval(id) {
@@ -215,6 +226,9 @@ import {
       var entry = el('div', 'download-task');
       var head = el('div', 'download-task-head');
       head.appendChild(el('div', 'download-task-name', state.name));
+      var mode = el('span', 'download-task-mode', stateModeText(state));
+      mode.classList.add(state.mode || 'unknown');
+      head.appendChild(mode);
       entry.appendChild(head);
 
       if (state.phase === 'running' || state.phase === 'paused' || state.phase === 'error') {
@@ -271,6 +285,8 @@ import {
       name: item.name,
       item: item,
       phase: 'running',
+      mode: 'unknown',
+      parallelism: 0,
       doneBytes: 0,
       totalBytes: item.size,
       error: '',
@@ -291,6 +307,8 @@ import {
           id: item.id, name: item.name, item: item, error: '', retry: ''
         };
         state.phase = next.phase || state.phase;
+        state.mode = next.mode || state.mode;
+        state.parallelism = next.parallelism ?? state.parallelism ?? 0;
         state.doneBytes = next.doneBytes ?? state.doneBytes ?? 0;
         state.totalBytes = next.totalBytes ?? state.totalBytes ?? item.size;
         state.error = next.error || '';

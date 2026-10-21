@@ -25,6 +25,7 @@
     "vue-pdf-embed": "^2.1.4"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "@vicons/fluent": "^0.13.0",
     "@vicons/material": "^0.13.0",
     "@vitejs/plugin-vue": "^6.0.0",
