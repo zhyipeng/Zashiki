@@ -278,7 +278,7 @@ func TestArchiveCancellationAndCreateValidation(t *testing.T) {
 	if _, err := service.CreateArchive(context.Background(), nil, filepath.Join(dir, "empty.zip"), "zip"); err == nil {
 		t.Fatal("allowed empty sources")
 	}
-	if _, err := service.CreateArchive(context.Background(), []string{source}, filepath.Join(dir, "bad.7z"), "7z"); err == nil {
+	if _, err := service.CreateArchive(context.Background(), []string{source}, filepath.Join(dir, "bad.rar"), "rar"); err == nil {
 		t.Fatal("allowed unsupported writer")
 	}
 	ctx, cancel := context.WithCancel(context.Background())

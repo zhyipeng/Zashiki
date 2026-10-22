@@ -514,6 +514,7 @@ func (f *FileService) CreateArchive(ctx context.Context, sources []string, desti
 	p.emit(OperationProgressPhaseScan, true)
 	defer func() { p.finish(err, errors.Is(err, context.Canceled)) }()
 	var engine archives.Archiver
+	var sevenZipExecutable string
 	switch format {
 	case "zip":
 		engine = archives.Zip{Compression: zip.Deflate, SelectiveCompression: true}
@@ -521,6 +522,14 @@ func (f *FileService) CreateArchive(ctx context.Context, sources []string, desti
 		engine = archives.Tar{}
 	case "tar.gz":
 		engine = archives.CompressedArchive{Compression: archives.Gz{}, Archival: archives.Tar{}}
+	case "7z":
+		sevenZipExecutable = findSevenZip(ctx, sevenZipCandidates())
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		if sevenZipExecutable == "" {
+			return "", fmt.Errorf("未找到可用的 7-Zip，请安装 7zz、7z 或 7za 后重试")
+		}
 	default:
 		return "", fmt.Errorf("不支持创建此压缩格式")
 	}
@@ -596,6 +605,9 @@ func (f *FileService) CreateArchive(ctx context.Context, sources []string, desti
 			total += file.Size()
 			totalItems++
 		}
+		if format == "7z" {
+			continue
+		}
 		open, name := file.Open, file.NameInArchive
 		file.Open = func() (fs.File, error) {
 			p.setCurrentName(name)
@@ -610,6 +622,12 @@ func (f *FileService) CreateArchive(ctx context.Context, sources []string, desti
 	p.snapshot.TotalItems = totalItems
 	p.mu.Unlock()
 	p.setTotalBytes(total)
+	if format == "7z" {
+		if err = createSevenZip(ctx, sevenZipExecutable, destination, inputs, files, p); err != nil {
+			return "", err
+		}
+		return destination, nil
+	}
 	output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if err != nil {
 		return "", err

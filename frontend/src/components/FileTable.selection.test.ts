@@ -16,6 +16,7 @@ vi.mock('@wailsio/runtime', async (importOriginal) => ({
 vi.mock('../../bindings/zashiki/internal/filemanager', () => ({
   FileService: {
     CreateArchive: vi.fn(),
+    GetArchiveFormats: vi.fn(),
     ListDirPage: async (path: string) => {
       const names = await readdir(path)
       return {
@@ -82,6 +83,7 @@ afterEach(async () => {
   useSettings().updateSetting('fileSort', { columnKey: '', order: '' })
   ;(window as any)._wails = originalWails
   vi.clearAllMocks()
+  vi.mocked(FileService.GetArchiveFormats).mockReset()
 })
 
 async function setup(os: string, names = ['a.txt', 'b.txt'], stubs: Record<string, any> = {}) {
@@ -126,6 +128,31 @@ it('右键压缩保留所选文件，并为输出追加 ZIP 扩展名', async ()
   await view.findAll('button').find(button => button.text() === '开始压缩')!.trigger('click')
   await flushPromises()
   expect(FileService.CreateArchive).toHaveBeenCalledWith([join(dir, 'a.txt'), join(dir, 'b.txt')], join(dir, 'backup.zip'), 'zip')
+})
+
+it.each([false, true])('根据环境检测结果提供 7z 格式（可用：%s）', async (available) => {
+  vi.mocked(FileService.GetArchiveFormats).mockImplementation(() => CancellablePromise.resolve(available ? ['zip', 'tar.gz', 'tar', '7z'] : ['zip', 'tar.gz', 'tar']))
+  const Modal = defineComponent({
+    props: ['show'],
+    setup: (props, { slots }) => () => props.show ? h('section', [slots.default?.(), slots.footer?.()]) : null,
+  })
+  const view = await setup('darwin', ['a.txt'], { NModal: Modal, Modal })
+  const row = view.get(`[data-entry-key="${join(dir, 'a.txt')}"]`)
+  await row.trigger('contextmenu')
+  await nextTick()
+  view.findComponent({ name: 'Dropdown' }).vm.$emit('select', 'create-archive')
+  await flushPromises()
+  const select = view.findComponent({ name: 'Select' })
+  const values = select.props('options').map((option: { value: string }) => option.value)
+  expect(values).toEqual(available ? ['zip', 'tar.gz', 'tar', '7z'] : ['zip', 'tar.gz', 'tar'])
+  if (available) {
+    select.vm.$emit('update:value', '7z')
+    await nextTick()
+    vi.mocked(FileService.CreateArchive).mockImplementation(() => CancellablePromise.resolve(join(dir, 'a.txt.7z')))
+    await view.findAll('button').find(button => button.text() === '开始压缩')!.trigger('click')
+    await flushPromises()
+    expect(FileService.CreateArchive).toHaveBeenLastCalledWith([join(dir, 'a.txt')], join(dir, 'a.txt.7z'), '7z')
+  }
 })
 
 async function pointer(target: { element: Element }, type: string, x: number) {

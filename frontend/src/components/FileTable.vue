@@ -510,17 +510,31 @@ const previewModal = ref({
 let previewRequestId = 0
 const archiveModal = ref({ show: false, path: '', name: '' })
 const createArchiveModal = ref({ show: false, sources: [] as string[], directory: '', name: '', format: 'zip', loading: false, error: '' })
-const archiveFormats = [{ label: 'ZIP', value: 'zip' }, { label: 'TAR.GZ', value: 'tar.gz' }, { label: 'TAR', value: 'tar' }]
+const archiveFormats = ref([{ label: 'ZIP', value: 'zip' }, { label: 'TAR.GZ', value: 'tar.gz' }, { label: 'TAR', value: 'tar' }])
+const checkingArchiveFormats = ref(false)
 
 function openArchive(entry: FileEntry) {
   archiveModal.value = { show: true, path: entry.path, name: entry.name }
 }
 
-function openCreateArchive(entries: FileEntry[]) {
+async function openCreateArchive(entries: FileEntry[]) {
   if (!entries.length) return
   createArchiveModal.value = {
     show: true, sources: entries.map(entry => entry.path), directory: getParentPath(entries[0].path, props.separator) || props.path,
     name: entries.length === 1 ? entries[0].name : '归档', format: 'zip', loading: false, error: '',
+  }
+  const modal = createArchiveModal.value
+  archiveFormats.value = [{ label: 'ZIP', value: 'zip' }, { label: 'TAR.GZ', value: 'tar.gz' }, { label: 'TAR', value: 'tar' }]
+  checkingArchiveFormats.value = true
+  try {
+    const formats = await FileService.GetArchiveFormats()
+    if (createArchiveModal.value === modal) {
+      archiveFormats.value = formats.map(value => ({ label: value.toUpperCase(), value }))
+    }
+  } catch {
+    // Built-in formats remain available if environment detection fails.
+  } finally {
+    if (createArchiveModal.value === modal) checkingArchiveFormats.value = false
   }
 }
 
@@ -686,7 +700,7 @@ const contextMenuActions: ContextMenuAction[] = [
     key: 'create-archive',
     label: '压缩为…',
     targets: ['entry'],
-    run: target => { if (target.kind === 'entry') openCreateArchive(operationEntriesForEntry(target.entry)) },
+    run: target => { if (target.kind === 'entry') return openCreateArchive(operationEntriesForEntry(target.entry)) },
   },
   {
     key: 'browse-archive',
@@ -2416,7 +2430,8 @@ useKeyboardShortcuts(() => shortcutActions, {
         <NText>将 {{ createArchiveModal.sources.length }} 个所选项目压缩到 {{ createArchiveModal.directory }}</NText>
         <NAlert v-if="createArchiveModal.error" type="error">{{ createArchiveModal.error }}</NAlert>
         <NInput v-model:value="createArchiveModal.name" placeholder="压缩包文件名（自动追加扩展名）" :disabled="createArchiveModal.loading" @keyup.enter="confirmCreateArchive" />
-        <NSelect v-model:value="createArchiveModal.format" :options="archiveFormats" :disabled="createArchiveModal.loading" />
+        <NSelect v-model:value="createArchiveModal.format" :options="archiveFormats" :loading="checkingArchiveFormats" :disabled="createArchiveModal.loading" />
+        <NText depth="3">{{ checkingArchiveFormats ? '正在检测本机 7-Zip…' : archiveFormats.some(item => item.value === '7z') ? '已检测到本机 7-Zip，可创建 7z 压缩包。' : '未检测到可用的 7-Zip，仅提供内置格式。' }}</NText>
         <NText depth="3">已有同名压缩包不会被覆盖。暂不支持加密、分卷和链接文件。</NText>
       </NSpace>
       <template #footer>

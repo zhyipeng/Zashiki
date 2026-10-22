@@ -93,6 +93,12 @@ export function GetArchiveEntryPreview(filename: string, entryPath: string): $Ca
     });
 }
 
+export function GetArchiveFormats(): $CancellablePromise<string[]> {
+    return $Call.ByID(2257738707).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
 export function GetFileInfo(path: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(1693135863, path).then(($result: any) => {
         return $$createType8($result);
