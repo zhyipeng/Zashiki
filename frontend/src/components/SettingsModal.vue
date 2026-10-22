@@ -6,6 +6,8 @@ import type { ThemeMode } from '../composables/useSettings'
 import { Dialogs, System } from '@wailsio/runtime'
 import { SettingsService } from '../../bindings/zashiki/internal/settings'
 import { LanShareService } from '../../bindings/zashiki/internal/lanshare'
+import { useAppUpdate } from '../composables/useAppUpdate'
+import { Browser } from '@wailsio/runtime'
 
 const props = defineProps<{
   show: boolean
@@ -22,6 +24,8 @@ const addingToContextMenu = ref(false)
 const isWindows = ref(false)
 const lanPort = ref<number | null>(null)
 const lanReceiveDir = ref('')
+const appUpdate = useAppUpdate()
+const { status: updateStatus, busy: updateBusy, error: updateError, feedback: updateFeedback } = appUpdate
 
 onMounted(() => {
   isWindows.value = System.IsWindows()
@@ -225,6 +229,14 @@ async function addToContextMenu() {
         <NButton size="small" @click="browseReceiveDir">浏览</NButton>
       </div>
     </div>
+    <div class="setting-item">
+      <span class="setting-label">应用更新 {{ updateStatus.currentVersion }}</span>
+      <NButton v-if="updateStatus.enabled" size="small" :loading="updateBusy" @click="appUpdate.check(true)">检查更新</NButton>
+      <NButton v-else size="small" @click="Browser.OpenURL('https://github.com/zhyipeng/Zashiki/releases/latest')">前往发布页</NButton>
+    </div>
+    <p v-if="updateStatus.reason || updateFeedback || updateError" class="update-feedback">
+      {{ updateError || updateFeedback || updateStatus.reason }}
+    </p>
   </NModal>
 </template>
 
@@ -246,4 +258,6 @@ async function addToContextMenu() {
   align-items: center;
   gap: 8px;
 }
+
+.update-feedback { margin: 4px 0; font-size: 12px; overflow-wrap: anywhere; }
 </style>

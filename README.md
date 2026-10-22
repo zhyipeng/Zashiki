@@ -73,3 +73,17 @@ zashiki/
 ```
 
 更多约定见 [AGENTS.md](AGENTS.md)。
+
+## 自动更新
+
+使用 Wails `v3.0.0-beta.34`，需要 Go 1.26 或更新版本。正式应用启动时检查当前仓库的 GitHub Releases，之后每 6 小时检查一次；设置底部也可手动检查。发现新版本后显示版本说明，确认后才下载，SHA-256 校验通过后自动重启安装。网络检查失败不会打断启动；下载或校验失败不会重启。
+
+发布流程保留首次安装包，并追加以下更新包和 `SHA256SUMS.txt`：
+
+- macOS：`Zashiki-darwin-universal-update.zip`，仅包含一个 `Zashiki.app`，支持 Intel 和 Apple Silicon。
+- Windows：`Zashiki-windows-amd64-update.zip`，仅包含 `Zashiki.exe`。
+- Linux：`Zashiki-linux-amd64-update.tar.gz`，仅包含便携二进制 `Zashiki`，运行环境需要相应 GTK/WebKit 系统库。
+
+开发模式关闭自动更新。Linux 的 deb/rpm 系统安装及 AppImage 使用发布页或包管理器更新，避免把应用本体写进错误的安装位置。不受支持的架构会显示发布页入口。应用安装目录需要当前用户具有写入权限。
+
+推送 `v1.2.3` 形式的版本标签会触发现有发布工作流，CI 用标签同步应用和安装包版本。带预发布后缀的标签会标为 prerelease，默认更新检查只读取正式版本。首次使用本次接入的版本仍需手动安装，之后的新版本才支持应用内更新。

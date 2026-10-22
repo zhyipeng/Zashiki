@@ -7,3 +7,4 @@ build/linux/Zashiki.desktop
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 /zashiki
 .zcode
+__pycache__/

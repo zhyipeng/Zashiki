@@ -10,7 +10,7 @@ permissions:
 
 env:
   APP_NAME: Zashiki
-  WAILS_VERSION: v3.0.0-beta.12
+  WAILS_VERSION: v3.0.0-beta.34
 
 jobs:
   build:
@@ -24,12 +24,16 @@ jobs:
             os: macos-latest
             artifact-name: zashiki-darwin-universal
             artifact-file: Zashiki.dmg
-            artifact-path: bin/*.dmg
+            artifact-path: |
+              bin/*.dmg
+              bin/*-update.zip
           - platform: windows
             os: windows-latest
             artifact-name: zashiki-windows-amd64
             artifact-file: Zashiki-amd64-installer.exe
-            artifact-path: bin/*-installer.exe
+            artifact-path: |
+              bin/*-installer.exe
+              bin/*-update.zip
           - platform: linux
             os: ubuntu-latest
             artifact-name: zashiki-linux-amd64
@@ -38,6 +42,7 @@ jobs:
               bin/*.deb
               bin/*.rpm
               bin/*.AppImage
+              bin/*-update.tar.gz
 
     steps:
       - name: Checkout
@@ -51,6 +56,12 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+
+      - name: Set release version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python build/prepare_release.py "$RELEASE_TAG"
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -85,7 +96,9 @@ jobs:
         if: matrix.platform == 'darwin'
         shell: bash
         run: |
-          task darwin:package:dmg
+          task darwin:package:universal
+          task darwin:create:dmg
+          ditto -c -k --keepParent bin/Zashiki.app bin/Zashiki-darwin-universal-update.zip
 
       # Windows ships a per-user NSIS installer (Zashiki-amd64-installer.exe).
       # It installs under %LOCALAPPDATA% without a UAC prompt, and adds a detached
@@ -96,6 +109,11 @@ jobs:
         shell: bash
         run: |
           task windows:package ARCH=amd64 INSTALL_SCOPE=user
+
+      - name: Package Windows update
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: Compress-Archive -Path bin/Zashiki.exe -DestinationPath bin/Zashiki-windows-amd64-update.zip
 
       # Linux ships deb + rpm + AppImage installers. `create:appimage` invokes
       # linuxdeploy, which downloads an AppImage; set APPIMAGE_EXTRACT_AND_RUN
@@ -109,6 +127,7 @@ jobs:
           task linux:create:deb
           task linux:create:rpm
           task linux:create:appimage
+          tar -czf bin/Zashiki-linux-amd64-update.tar.gz -C bin Zashiki
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -139,3 +158,4 @@ jobs:
           files: release-assets/*
           fail_on_unmatched_files: true
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

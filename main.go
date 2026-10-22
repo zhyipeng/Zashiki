@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"zashiki/internal/appupdate"
 	"zashiki/internal/filemanager"
 	"zashiki/internal/lanshare"
 	"zashiki/internal/mediastream"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
@@ -244,6 +246,7 @@ func resolveInitialDir(args []string) string {
 // main function serves as the application's entry point. It initializes the application, creates a window,
 // and runs the application, logging any error that might occur.
 func main() {
+	updater.HandleHelperMode()
 
 	fileService := &filemanager.FileService{}
 	initialDir := resolveInitialDir(os.Args[1:])
@@ -273,6 +276,7 @@ func main() {
 			application.NewService(nativefs.NewFileTransferService()),
 			application.NewService(lanShareService),
 			application.NewService(mediaStreamService),
+			application.NewService(appupdate.NewUpdateService(currentVersion())),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),

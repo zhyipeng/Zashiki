@@ -11,6 +11,7 @@ import SettingsModal from './components/SettingsModal.vue'
 import OperationProgressbar from './components/OperationProgressbar.vue'
 import SyncToolPage from './components/sync/SyncToolPage.vue'
 import TransferPage from './components/transfer/TransferPage.vue'
+import AppUpdate from './components/AppUpdate.vue'
 import { useTheme } from './composables/useTheme'
 import { useFileClipboard } from './composables/useFileClipboard'
 import { bindOperationProgressEvents } from './composables/useOperationProgress'
@@ -231,6 +232,7 @@ function basename(path: string): string {
 <template>
   <NConfigProvider :theme="naiveTheme">
     <NMessageProvider>
+      <AppUpdate />
       <div v-if="loading" class="app-loading">
         <NSpin/>
       </div>
