@@ -343,7 +343,7 @@ function friendlyError(err: unknown): string {
   border: 1px solid var(--n-border-color);
   border-radius: 8px;
   padding: 14px 16px;
-  background: var(--n-color);
+  background: var(--app-surface-background, var(--n-color));
 }
 
 .transfer-card-title {

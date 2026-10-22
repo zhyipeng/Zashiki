@@ -2488,7 +2488,7 @@ useKeyboardShortcuts(() => shortcutActions, {
   align-items: center;
   padding: 4px 8px;
   border-bottom: 1px solid var(--n-border-color);
-  background: var(--n-color-embedded);
+  background: var(--app-surface-background, var(--n-color-embedded));
   flex-shrink: 0;
   gap: 8px;
 }
@@ -2523,7 +2523,7 @@ useKeyboardShortcuts(() => shortcutActions, {
 .search-row {
   padding: 6px 8px;
   border-bottom: 1px solid var(--n-border-color);
-  background: var(--n-color);
+  background: var(--app-surface-background, var(--n-color));
   flex-shrink: 0;
 }
 

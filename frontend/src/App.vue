@@ -16,12 +16,14 @@ import { useTheme } from './composables/useTheme'
 import { useFileClipboard } from './composables/useFileClipboard'
 import { bindOperationProgressEvents } from './composables/useOperationProgress'
 import { bindLanShareEvents, useLanShare } from './composables/useLanShare'
+import { configureWindowAppearance } from './composables/windowAppearance'
 
 const showSettings = ref(false)
 const activeView = ref<'files' | 'sync' | 'transfer'>('files')
 const { isDarkTheme, mountTheme } = useTheme()
 const fileClipboard = useFileClipboard()
 const naiveTheme = computed(() => isDarkTheme.value ? darkTheme : null)
+const naiveThemeOverrides = computed(() => configureWindowAppearance(isDarkTheme.value))
 
 interface SelectionStatus {
   multiSelectMode: boolean
@@ -230,7 +232,7 @@ function basename(path: string): string {
 </script>
 
 <template>
-  <NConfigProvider :theme="naiveTheme">
+  <NConfigProvider :theme="naiveTheme" :theme-overrides="naiveThemeOverrides">
     <NMessageProvider>
       <AppUpdate />
       <div v-if="loading" class="app-loading">
@@ -370,6 +372,36 @@ html, body, #app {
   --app-background: #101014;
   --sidebar-root-used-color: #2f5a46;
   --sidebar-root-space-color: #d9e7de;
+}
+
+:root[data-window-material="glass"] {
+  --app-background: transparent;
+  --app-glass-tint: rgba(250, 251, 253, 0.88);
+  --app-surface-background: rgba(255, 255, 255, 0.36);
+}
+
+:root[data-window-material="glass"][data-theme="dark"] {
+  --app-glass-tint: rgba(16, 16, 20, 0.48);
+  --app-surface-background: rgba(32, 32, 38, 0.24);
+}
+
+:root[data-window-material="glass"] .app-layout,
+:root[data-window-material="glass"] .app-loading {
+  background: var(--app-glass-tint);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-window-material="glass"] {
+    --app-background: #ffffff;
+    --app-glass-tint: #ffffff;
+    --app-surface-background: #f5f5f5;
+  }
+
+  :root[data-window-material="glass"][data-theme="dark"] {
+    --app-background: #101014;
+    --app-glass-tint: #101014;
+    --app-surface-background: #202026;
+  }
 }
 
 .app-layout {

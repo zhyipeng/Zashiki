@@ -192,6 +192,9 @@ if [ "$GOOS" = "windows" ]; then
 fi
 
 TAGS="production"
+if [ "$GOOS" = "darwin" ]; then
+    TAGS="${TAGS},private_mac_apis"
+fi
 if [ -n "$EXTRA_TAGS" ]; then
     TAGS="${TAGS},${EXTRA_TAGS}"
 fi

@@ -87,3 +87,9 @@ zashiki/
 开发模式关闭自动更新。Linux 的 deb/rpm 系统安装及 AppImage 使用发布页或包管理器更新，避免把应用本体写进错误的安装位置。不受支持的架构会显示发布页入口。应用安装目录需要当前用户具有写入权限。
 
 推送 `v1.2.3` 形式的版本标签会触发现有发布工作流，CI 用标签同步应用和安装包版本。带预发布后缀的标签会标为 prerelease，默认更新检查只读取正式版本。首次使用本次接入的版本仍需手动安装，之后的新版本才支持应用内更新。
+
+## macOS 毛玻璃
+
+macOS 使用原生 `NSVisualEffectView` 提供全窗口磨砂毛玻璃，支持深浅主题。`task dev`、`task build` 和 Docker 交叉构建已启用 Wails 的 `private_mac_apis` 构建标签：该版本框架需要通过 WebKit 的非公开 `drawsBackground` 属性关闭 WebView 的实色背景。直接使用 Go 命令运行时也需添加此标签，例如 `go run -tags private_mac_apis .`。修改窗口材质或构建标签后需要重新编译并重启原生进程，前端热更新不会生效。
+
+该非公开 API 不适用于 Mac App Store 发布；后续若要上架，需要重新评估透明方案。

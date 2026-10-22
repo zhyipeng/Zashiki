@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -293,14 +294,10 @@ func main() {
 	// 'BackgroundColour' is the background colour of the window.
 	// 'URL' is the URL that will be loaded into the webview.
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:          "Zashiki",
-		EnableFileDrop: true,
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
-		},
-		BackgroundColour: application.NewRGB(0, 0, 0),
+		Title:            "Zashiki",
+		EnableFileDrop:   true,
+		Mac:              macWindowOptions(),
+		BackgroundColour: windowBackgroundColour(runtime.GOOS),
 		URL:              "/",
 		Width:            1200,
 		Height:           800,
