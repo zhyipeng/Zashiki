@@ -6,7 +6,7 @@ let activeFileTableShortcutScopeId = 0
 <script setup lang="ts">
 import { ref, watch, computed, h, nextTick, onMounted } from 'vue'
 import type { VNodeChild } from 'vue'
-import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NCheckbox, NInput, NAutoComplete, NDropdown, NModal, NSpace, NTag, useMessage } from 'naive-ui'
+import { NDataTable, NButton, NText, NSpin, NIcon, NEmpty, NAlert, NCheckbox, NInput, NAutoComplete, NDropdown, NModal, NSpace, NTag, NSelect, useMessage } from 'naive-ui'
 import type { AutoCompleteInst, AutoCompleteOption, DataTableColumns, DataTableInst, DataTableSortState, DropdownOption } from 'naive-ui'
 import { Clipboard } from '@wailsio/runtime'
 import { FileService } from '../../bindings/zashiki/internal/filemanager'
@@ -28,6 +28,8 @@ import { requestLanShare } from '../composables/useLanShare'
 import { useFileOperationHistory } from '../composables/useFileOperationHistory'
 import DropConfirmModal from './DropConfirmModal.vue'
 import FilePreviewModal from './FilePreviewModal.vue'
+import ArchiveBrowser from './ArchiveBrowser.vue'
+import { isArchiveName } from './archive'
 import { fileTypeLabel, isExeFile, isTextFile, resolveFileIcon } from './fileIcons'
 import { isImageEntry, THUMBNAIL_SIZE } from './thumbnails'
 import { thumbnailUrl } from './assetUrl'
@@ -448,7 +450,7 @@ const selectedPathSet = computed(() => new Set(selectedRowKeys.value))
 const sortState = computed(() => settings.fileSort)
 const trashLabel = computed(() => props.trashLabel || '回收站')
 type ContextTarget = { kind: 'blank', dir: string } | { kind: 'entry', entry: FileEntry }
-type ContextActionKey = 'new-folder' | 'open-terminal' | 'open-in-file-manager' | 'paste' | 'refresh' | 'open' | 'open-with-editor' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete' | 'lan-share'
+type ContextActionKey = 'new-folder' | 'open-terminal' | 'open-in-file-manager' | 'paste' | 'refresh' | 'open' | 'open-with-editor' | 'rename' | 'copy-path' | 'copy' | 'cut' | 'delete' | 'lan-share' | 'create-archive' | 'browse-archive'
 
 interface ContextMenuAction {
   key: ContextActionKey
@@ -506,6 +508,42 @@ const previewModal = ref({
   error: '',
 })
 let previewRequestId = 0
+const archiveModal = ref({ show: false, path: '', name: '' })
+const createArchiveModal = ref({ show: false, sources: [] as string[], directory: '', name: '', format: 'zip', loading: false, error: '' })
+const archiveFormats = [{ label: 'ZIP', value: 'zip' }, { label: 'TAR.GZ', value: 'tar.gz' }, { label: 'TAR', value: 'tar' }]
+
+function openArchive(entry: FileEntry) {
+  archiveModal.value = { show: true, path: entry.path, name: entry.name }
+}
+
+function openCreateArchive(entries: FileEntry[]) {
+  if (!entries.length) return
+  createArchiveModal.value = {
+    show: true, sources: entries.map(entry => entry.path), directory: getParentPath(entries[0].path, props.separator) || props.path,
+    name: entries.length === 1 ? entries[0].name : '归档', format: 'zip', loading: false, error: '',
+  }
+}
+
+async function confirmCreateArchive() {
+  const modal = createArchiveModal.value
+  if (modal.loading || !modal.name.trim()) return
+  const name = modal.name.trim()
+  if (/[\\/]/.test(name) || name === '.' || name === '..') { modal.error = '请输入文件名，不包含目录路径'; return }
+  modal.loading = true
+  modal.error = ''
+  const suffix = `.${modal.format}`
+  const output = joinPath(modal.directory, name.toLowerCase().endsWith(suffix) ? name : name + suffix, props.separator)
+  try {
+    await trackOperationPromise(FileService.CreateArchive(modal.sources, output, modal.format))
+    modal.show = false
+    message.success('压缩完成')
+    notifyDirectoriesChanged([modal.directory])
+  } catch (err) {
+    if (!isOperationCancelledError(err)) modal.error = String(err)
+  } finally {
+    modal.loading = false
+  }
+}
 
 watch([multiSelectMode, selectedRowKeys], () => {
   emit('selectionStatus', {
@@ -643,6 +681,19 @@ const contextMenuActions: ContextMenuAction[] = [
       const paths = operationEntriesForEntry(target.entry).map(entry => entry.path)
       requestLanShare(paths)
     },
+  },
+  {
+    key: 'create-archive',
+    label: '压缩为…',
+    targets: ['entry'],
+    run: target => { if (target.kind === 'entry') openCreateArchive(operationEntriesForEntry(target.entry)) },
+  },
+  {
+    key: 'browse-archive',
+    label: '浏览 / 解压压缩包…',
+    targets: ['entry'],
+    visible: target => target.kind === 'entry' && !target.entry.isDir && isArchiveName(target.entry.name),
+    run: target => { if (target.kind === 'entry') openArchive(target.entry) },
   },
 ]
 
@@ -1240,6 +1291,8 @@ async function onRowDblclick(row: FileEntry) {
 async function openEntry(row: FileEntry) {
   if (row.isDir) {
     emit('navigate', actualEntryPath(row))
+  } else if (isArchiveName(row.name)) {
+    openArchive(row)
   } else {
     try {
       await FileService.OpenFile(row.path)
@@ -1782,7 +1835,7 @@ watch(() => props.focused, (focused) => {
 })
 
 function isShortcutScopeActive() {
-  return props.focused === true
+  return props.focused === true && !archiveModal.value.show && !createArchiveModal.value.show
 }
 
 function handleEscapeShortcut() {
@@ -1883,6 +1936,7 @@ function openCurrentPreview() {
 }
 
 async function openPreviewModal(entry: FileEntry) {
+  if (isArchiveName(entry.name)) { openArchive(entry); return }
   const requestId = ++previewRequestId
   previewModal.value = {
     show: true,
@@ -2353,6 +2407,25 @@ useKeyboardShortcuts(() => shortcutActions, {
       @update:show="onPreviewModalShow"
       @save="savePreviewContent"
     />
+    <ArchiveBrowser
+      v-model:show="archiveModal.show" :archive-path="archiveModal.path" :name="archiveModal.name" :separator="separator"
+      @extracted="(directory: string) => notifyDirectoriesChanged([directory])"
+    />
+    <NModal v-model:show="createArchiveModal.show" preset="card" title="创建压缩包" style="width: min(480px, 92vw)" :mask-closable="!createArchiveModal.loading" :closable="!createArchiveModal.loading" :close-on-esc="!createArchiveModal.loading">
+      <NSpace vertical :size="12">
+        <NText>将 {{ createArchiveModal.sources.length }} 个所选项目压缩到 {{ createArchiveModal.directory }}</NText>
+        <NAlert v-if="createArchiveModal.error" type="error">{{ createArchiveModal.error }}</NAlert>
+        <NInput v-model:value="createArchiveModal.name" placeholder="压缩包文件名（自动追加扩展名）" :disabled="createArchiveModal.loading" @keyup.enter="confirmCreateArchive" />
+        <NSelect v-model:value="createArchiveModal.format" :options="archiveFormats" :disabled="createArchiveModal.loading" />
+        <NText depth="3">已有同名压缩包不会被覆盖。暂不支持加密、分卷和链接文件。</NText>
+      </NSpace>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton :disabled="createArchiveModal.loading" @click="createArchiveModal.show = false">取消</NButton>
+          <NButton type="primary" :loading="createArchiveModal.loading" :disabled="createArchiveModal.loading || !createArchiveModal.name.trim()" @click="confirmCreateArchive">开始压缩</NButton>
+        </NSpace>
+      </template>
+    </NModal>
     <NModal
       v-model:show="createFolderModal.show"
       preset="card"

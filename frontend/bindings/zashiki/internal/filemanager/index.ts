@@ -7,6 +7,8 @@ export {
 };
 
 export {
+    ArchiveEntry,
+    ArchivePage,
     DirPage,
     EntryOperationResult,
     EntryPathPair,

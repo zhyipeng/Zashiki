@@ -9,10 +9,11 @@ import (
 
 // FileService 是文件系统服务入口。mu/cacheOrder 供 ListDirPage 的分页枚举缓存使用。
 type FileService struct {
-	mu         sync.Mutex
-	dirCache   map[string]*dirCacheEntry
-	cacheOrder []string // LRU 序，最近使用在末尾
-	initialDir string   // 命令行指定的启动目录（空则回退到 home）
+	mu           sync.Mutex
+	dirCache     map[string]*dirCacheEntry
+	cacheOrder   []string // LRU 序，最近使用在末尾
+	initialDir   string   // 命令行指定的启动目录（空则回退到 home）
+	archiveCache map[string]*archiveIndex
 }
 
 // SetInitialDir 记录命令行参数指定的启动目录，供前端初始化定位。

@@ -42,6 +42,10 @@ export function CopyEntriesToTargets(pairs: $models.EntryPathPair[]): $Cancellab
     });
 }
 
+export function CreateArchive(sources: string[], destination: string, format: string): $CancellablePromise<string> {
+    return $Call.ByID(1781908611, sources, destination, format);
+}
+
 export function CreateFolder(parentDir: string, name: string): $CancellablePromise<string> {
     return $Call.ByID(732689535, parentDir, name);
 }
@@ -72,15 +76,32 @@ export function ExecuteSync(config: $models.SyncConfig): $CancellablePromise<$mo
     });
 }
 
+/**
+ * ExtractArchive creates a new destination; existing files are never overwritten.
+ * os.Root provides filesystem-level confinement even if a path is concurrently replaced.
+ */
+export function ExtractArchive(filename: string, destination: string, selected: string[]): $CancellablePromise<string> {
+    return $Call.ByID(3280075750, filename, destination, selected);
+}
+
+/**
+ * Preview only text and images in memory; archive paths never enter disk preview APIs.
+ */
+export function GetArchiveEntryPreview(filename: string, entryPath: string): $CancellablePromise<$models.FilePreview> {
+    return $Call.ByID(3109404357, filename, entryPath).then(($result: any) => {
+        return $$createType7($result);
+    });
+}
+
 export function GetFileInfo(path: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(1693135863, path).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType8($result);
     });
 }
 
 export function GetFilePreview(path: string): $CancellablePromise<$models.FilePreview> {
     return $Call.ByID(4209707701, path).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType7($result);
     });
 }
 
@@ -116,9 +137,15 @@ export function IsSameDrive(path1: string, path2: string): $CancellablePromise<b
     return $Call.ByID(2819228555, path1, path2);
 }
 
+export function ListArchive(filename: string, directory: string, offset: number, limit: number): $CancellablePromise<$models.ArchivePage> {
+    return $Call.ByID(678491883, filename, directory, offset, limit).then(($result: any) => {
+        return $$createType12($result);
+    });
+}
+
 export function ListDir(path: string): $CancellablePromise<$models.FileEntry[]> {
     return $Call.ByID(461256242, path).then(($result: any) => {
-        return $$createType12($result);
+        return $$createType13($result);
     });
 }
 
@@ -130,7 +157,7 @@ export function ListDir(path: string): $CancellablePromise<$models.FileEntry[]> 
  */
 export function ListDirPage(path: string, offset: number, limit: number): $CancellablePromise<$models.DirPage> {
     return $Call.ByID(2813778809, path, offset, limit).then(($result: any) => {
-        return $$createType13($result);
+        return $$createType14($result);
     });
 }
 
@@ -168,13 +195,13 @@ export function OpenWithEditor(path: string, editorProgram: string): $Cancellabl
 
 export function RenameEntry(path: string, name: string): $CancellablePromise<$models.FileEntry> {
     return $Call.ByID(1533604623, path, name).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType8($result);
     });
 }
 
 export function SaveTextPreview(path: string, content: string, expectedVersion: string): $CancellablePromise<$models.FilePreview> {
     return $Call.ByID(840243591, path, content, expectedVersion).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType7($result);
     });
 }
 
@@ -199,10 +226,11 @@ const $$createType3 = $models.EntryOperationResult.createFrom;
 const $$createType4 = $Create.Array($$createType3);
 const $$createType5 = $models.SyncResult.createFrom;
 const $$createType6 = $Create.Nullable($$createType5);
-const $$createType7 = $models.FileEntry.createFrom;
-const $$createType8 = $models.FilePreview.createFrom;
+const $$createType7 = $models.FilePreview.createFrom;
+const $$createType8 = $models.FileEntry.createFrom;
 const $$createType9 = $models.RootEntry.createFrom;
 const $$createType10 = $Create.Array($$createType9);
 const $$createType11 = $models.TrashInfo.createFrom;
-const $$createType12 = $Create.Array($$createType7);
-const $$createType13 = $models.DirPage.createFrom;
+const $$createType12 = $models.ArchivePage.createFrom;
+const $$createType13 = $Create.Array($$createType8);
+const $$createType14 = $models.DirPage.createFrom;

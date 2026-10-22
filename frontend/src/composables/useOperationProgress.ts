@@ -3,7 +3,7 @@ import { Events } from '@wailsio/runtime'
 import type { CancellablePromise } from '@wailsio/runtime'
 import { OperationProgress } from '../../bindings/zashiki/internal/filemanager/models'
 
-export type OperationKind = 'copy' | 'move' | 'delete' | 'trash' | 'sync'
+export type OperationKind = 'copy' | 'move' | 'delete' | 'trash' | 'sync' | 'compress' | 'extract'
 export type OperationPhase = 'scan' | 'run' | 'done' | 'error' | 'cancelled'
 
 export interface OperationProgressState {
@@ -90,6 +90,8 @@ const operationKindLabels: Record<OperationKind, string> = {
   delete: '删除',
   trash: '回收',
   sync: '同步',
+  compress: '压缩',
+  extract: '解压',
 }
 
 export function operationLabel(kind: OperationKind): string {

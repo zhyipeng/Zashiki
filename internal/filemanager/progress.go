@@ -17,11 +17,13 @@ const operationProgressEventName = "filemanager:operation-progress"
 type OperationKind string
 
 const (
-	OperationKindCopy   OperationKind = "copy"
-	OperationKindMove   OperationKind = "move"
-	OperationKindDelete OperationKind = "delete"
-	OperationKindTrash  OperationKind = "trash"
-	OperationKindSync   OperationKind = "sync"
+	OperationKindCopy     OperationKind = "copy"
+	OperationKindMove     OperationKind = "move"
+	OperationKindDelete   OperationKind = "delete"
+	OperationKindTrash    OperationKind = "trash"
+	OperationKindSync     OperationKind = "sync"
+	OperationKindCompress OperationKind = "compress"
+	OperationKindExtract  OperationKind = "extract"
 )
 
 type OperationProgressPhase string

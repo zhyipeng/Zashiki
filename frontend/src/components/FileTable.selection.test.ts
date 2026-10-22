@@ -6,6 +6,7 @@ import { defineComponent, h, nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { FileEntry } from '../../bindings/zashiki/internal/filemanager'
+import { CancellablePromise } from '@wailsio/runtime'
 
 vi.mock('@wailsio/runtime', async (importOriginal) => ({
   ...await importOriginal<typeof import('@wailsio/runtime')>(),
@@ -14,6 +15,7 @@ vi.mock('@wailsio/runtime', async (importOriginal) => ({
 }))
 vi.mock('../../bindings/zashiki/internal/filemanager', () => ({
   FileService: {
+    CreateArchive: vi.fn(),
     ListDirPage: async (path: string) => {
       const names = await readdir(path)
       return {
@@ -40,6 +42,8 @@ vi.mock('naive-ui', async (importOriginal) => ({
 }))
 
 import FileTable from './FileTable.vue'
+import ArchiveBrowser from './ArchiveBrowser.vue'
+import { FileService } from '../../bindings/zashiki/internal/filemanager'
 import { FileTransferService } from '../../bindings/zashiki/internal/nativefs'
 import { SettingsService } from '../../bindings/zashiki/internal/settings'
 import { useSettings } from '../composables/useSettings'
@@ -80,19 +84,49 @@ afterEach(async () => {
   vi.clearAllMocks()
 })
 
-async function setup(os: string) {
+async function setup(os: string, names = ['a.txt', 'b.txt'], stubs: Record<string, any> = {}) {
   ;(window as any)._wails = { environment: { OS: os } }
   dir = await mkdtemp(join(tmpdir(), 'file-table-selection-'))
-  await Promise.all(['a.txt', 'b.txt'].map(name => writeFile(join(dir, name), '')))
+  await Promise.all(names.map(name => writeFile(join(dir, name), '')))
   wrapper = mount(FileTable, {
     props: { path: dir, separator: '/', homeDir: dir },
-    global: { stubs: { NDataTable: DataTable, DataTable } },
+    global: { stubs: { NDataTable: DataTable, DataTable, ...stubs } },
   })
   await flushPromises()
   await vi.waitFor(() => expect(wrapper!.find('table').exists()).toBe(true))
   await wrapper.get('[title="多选"]').trigger('click')
   return wrapper
 }
+
+it('双击压缩包打开包内浏览器', async () => {
+  const view = await setup('darwin', ['archive.zip'], { ArchiveBrowser: true })
+  await view.get('[title="多选"]').trigger('click')
+  await view.get(`[data-entry-key="${join(dir, 'archive.zip')}"]`).trigger('dblclick')
+  const browser = view.findComponent(ArchiveBrowser)
+  expect(browser.props('show')).toBe(true)
+  expect(browser.props('archivePath')).toBe(join(dir, 'archive.zip'))
+})
+
+it('右键压缩保留所选文件，并为输出追加 ZIP 扩展名', async () => {
+  const Modal = defineComponent({
+    props: ['show'],
+    setup: (props, { slots }) => () => props.show ? h('section', [slots.default?.(), slots.footer?.()]) : null,
+  })
+  const view = await setup('darwin', ['a.txt', 'b.txt'], { NModal: Modal, Modal })
+  for (const name of ['a.txt', 'b.txt']) await view.get(`[data-entry-key="${join(dir, name)}"]`).trigger('click')
+  await view.get(`[data-entry-key="${join(dir, 'b.txt')}"]`).trigger('contextmenu')
+  await nextTick()
+  const dropdown = view.findComponent({ name: 'Dropdown' })
+  const options = dropdown.props('options') as Array<{ key: string }>
+  expect(options.at(-1)?.key).toBe('create-archive')
+  dropdown.vm.$emit('select', 'create-archive')
+  await nextTick()
+  await view.get('input[placeholder="压缩包文件名（自动追加扩展名）"]').setValue('backup')
+  vi.mocked(FileService.CreateArchive).mockImplementation(() => CancellablePromise.resolve(join(dir, 'backup.zip')))
+  await view.findAll('button').find(button => button.text() === '开始压缩')!.trigger('click')
+  await flushPromises()
+  expect(FileService.CreateArchive).toHaveBeenCalledWith([join(dir, 'a.txt'), join(dir, 'b.txt')], join(dir, 'backup.zip'), 'zip')
+})
 
 async function pointer(target: { element: Element }, type: string, x: number) {
   target.element.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: 0 }))

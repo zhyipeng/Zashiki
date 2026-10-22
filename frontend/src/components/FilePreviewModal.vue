@@ -14,6 +14,7 @@ const props = defineProps<{
   preview: FilePreview | null
   loading?: boolean
   error?: string
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,13 +23,13 @@ const emit = defineEmits<{
 }>()
 
 const renderer = computed(() => resolvePreviewRenderer(props.preview))
-const title = computed(() => props.entry?.name || '预览')
+const title = computed(() => props.entry?.name || props.preview?.name || '预览')
 const sizeText = computed(() => formatPreviewSize(props.preview?.size ?? props.entry?.size ?? 0))
 const editMode = ref(false)
 const draftContent = ref('')
 const mdViewMode = ref<'preview' | 'source'>('preview')
 const htmlViewMode = ref<'preview' | 'source'>('preview')
-const canEdit = computed(() => props.preview?.kind === 'text' && !props.preview.truncated && !props.loading && !props.error)
+const canEdit = computed(() => !props.readonly && props.preview?.kind === 'text' && !props.preview.truncated && !props.loading && !props.error)
 const hasChanges = computed(() => draftContent.value !== (props.preview?.content || ''))
 const displayedTextContent = computed(() => previewTextContent(props.preview))
 const jsonFormatted = computed(() => isFormattedJsonPreview(props.preview))

@@ -19,6 +19,8 @@ const kindIcons = {
   delete: DeleteOutlineRound,
   trash: DeleteSweepOutlined,
   sync: SyncOutlined,
+  compress: ContentCopyOutlined,
+  extract: DriveFileMoveOutlined,
 } as const
 
 function iconFor(state: OperationProgressState) {

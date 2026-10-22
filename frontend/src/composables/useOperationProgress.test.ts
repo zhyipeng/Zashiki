@@ -115,5 +115,7 @@ describe('operationLabel', () => {
     expect(operationLabel('move')).toBe('移动')
     expect(operationLabel('delete')).toBe('删除')
     expect(operationLabel('trash')).toBe('回收')
+    expect(operationLabel('compress')).toBe('压缩')
+    expect(operationLabel('extract')).toBe('解压')
   })
 })
